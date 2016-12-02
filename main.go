@@ -136,7 +136,7 @@ func runClient(cfg BotConfig, twitter *twitter.Client) error {
 						innerData := innerData.(map[string]interface{})
 
 						price := innerData["price"].(float64)
-						leavesQty := innerData["leavesQty"].(float64)
+						leavesQty := int64(innerData["leavesQty"].(float64)) // Cast to int64 because this is always int
 						symbol := innerData["symbol"].(string)
 						side := innerData["side"].(string)
 
@@ -148,7 +148,7 @@ func runClient(cfg BotConfig, twitter *twitter.Client) error {
 						}
 
 						// Liquidated short on XBTUSD: Buy 130170 @ 772.02
-						status := fmt.Sprintf("Liquidated %v on %v: %v %v @ %v", position, symbol, side, humanize.Commaf(leavesQty), price)
+						status := fmt.Sprintf("Liquidated %v on %v: %v %v @ %v", position, symbol, side, humanize.Comma(leavesQty), price)
 
 						if tweet, _, err := twitter.Statuses.Update(status, nil); err != nil {
 							log.Println("Failed to tweet:", status)
