@@ -129,28 +129,32 @@ func runClient(cfg BotConfig, twitter *twitter.Client) error {
 				case "partial":
 				case "insert":
 					// This will panic if the cast fails, but it is fine, because it meant bitmex sent us bad data
-					innerData := data["data"].(map[string]interface{})
+					innerDataList := data["data"].([]interface{})
 
-					price := innerData["price"].(float64)
-					leavesQty := innerData["leavesQty"].(int64)
-					symbol := innerData["symbol"].(string)
-					side := innerData["side"].(string)
+					for _, innerData := range innerDataList {
+						innerData := innerData.(map[string]interface{})
 
-					var position string
-					if side == "Buy" {
-						position = "short"
-					} else {
-						position = "long"
-					}
+						price := innerData["price"].(float64)
+						leavesQty := innerData["leavesQty"].(int64)
+						symbol := innerData["symbol"].(string)
+						side := innerData["side"].(string)
 
-					// Liquidated short on XBTUSD: Buy 130170 @ 772.02
-					status := fmt.Sprintf("Liquidated %v on %v: %v %v @ %0.2f", position, unicodeMathSans(symbol), side, leavesQty, price)
-					statusText := fmt.Sprintf("Liquidated %v on %v: %v %v @ %0.2f", position, symbol, side, leavesQty, price)
+						var position string
+						if side == "Buy" {
+							position = "short"
+						} else {
+							position = "long"
+						}
 
-					if tweet, _, err := twitter.Statuses.Update(status, nil); err != nil {
-						log.Println("Failed to tweet:", statusText)
-					} else {
-						log.Printf("Sent tweet: %v: '%v'\n", tweet.IDStr, statusText)
+						// Liquidated short on XBTUSD: Buy 130170 @ 772.02
+						status := fmt.Sprintf("Liquidated %v on %v: %v %v @ %0.2f", position, unicodeMathSans(symbol), side, leavesQty, price)
+						statusText := fmt.Sprintf("Liquidated %v on %v: %v %v @ %0.2f", position, symbol, side, leavesQty, price)
+
+						if tweet, _, err := twitter.Statuses.Update(status, nil); err != nil {
+							log.Println("Failed to tweet:", statusText)
+						} else {
+							log.Printf("Sent tweet: %v: '%v'\n", tweet.IDStr, statusText)
+						}
 					}
 				}
 			}
