@@ -1,4 +1,4 @@
-Bitmex liqudation Twitter bot
+BitMex liquidation Twitter bot
 =================================
 
 https://twitter.com/BitmexRekt
