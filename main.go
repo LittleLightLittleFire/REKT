@@ -11,6 +11,7 @@ import (
 
 	"github.com/dghubble/go-twitter/twitter"
 	"github.com/dghubble/oauth1"
+	humanize "github.com/dustin/go-humanize"
 	"github.com/gorilla/websocket"
 	"github.com/hashicorp/errwrap"
 )
@@ -147,8 +148,8 @@ func runClient(cfg BotConfig, twitter *twitter.Client) error {
 						}
 
 						// Liquidated short on XBTUSD: Buy 130170 @ 772.02
-						status := fmt.Sprintf("Liquidated %v on %v: %v %v @ %v", position, unicodeMathSans(symbol), side, leavesQty, price)
-						statusText := fmt.Sprintf("Liquidated %v on %v: %v %v @ %v", position, symbol, side, leavesQty, price)
+						status := fmt.Sprintf("Liquidated %v on %v: %v %v @ %v", position, unicodeMathSans(symbol), side, humanize.Commaf(leavesQty), price)
+						statusText := fmt.Sprintf("Liquidated %v on %v: %v %v @ %v", position, symbol, side, humanize.Commaf(leavesQty), price)
 
 						if tweet, _, err := twitter.Statuses.Update(status, nil); err != nil {
 							log.Println("Failed to tweet:", statusText)
