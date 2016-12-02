@@ -54,26 +54,6 @@ func loadConfig() (config BotConfig, err error) {
 	return config, nil
 }
 
-func unicodeMathSans(input string) string {
-	runes := []rune(input)
-	var result []rune
-
-	for _, r := range runes {
-		switch {
-		case r >= 'A' && r <= 'Z':
-			r = (r - 'A') + '\U0001D5A0'
-		case r >= 'a' && r <= 'z':
-			r = (r - 'a') + '\U0001D5BA'
-		case r >= '0' && r <= '9':
-			r = (r - '0') + '\U0001D7E2'
-		}
-
-		result = append(result, r)
-	}
-
-	return string(result)
-}
-
 func runClient(cfg BotConfig, twitter *twitter.Client) error {
 	// Subscribe to the liquidation feed.
 	// https://www.bitmex.com/app/wsAPI
