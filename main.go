@@ -135,7 +135,7 @@ func runClient(cfg BotConfig, twitter *twitter.Client) error {
 						innerData := innerData.(map[string]interface{})
 
 						price := innerData["price"].(float64)
-						leavesQty := innerData["leavesQty"].(int64)
+						leavesQty := innerData["leavesQty"].(float64)
 						symbol := innerData["symbol"].(string)
 						side := innerData["side"].(string)
 
