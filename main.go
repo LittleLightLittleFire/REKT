@@ -147,8 +147,8 @@ func runClient(cfg BotConfig, twitter *twitter.Client) error {
 						}
 
 						// Liquidated short on XBTUSD: Buy 130170 @ 772.02
-						status := fmt.Sprintf("Liquidated %v on %v: %v %v @ %0.2f", position, unicodeMathSans(symbol), side, leavesQty, price)
-						statusText := fmt.Sprintf("Liquidated %v on %v: %v %v @ %0.2f", position, symbol, side, leavesQty, price)
+						status := fmt.Sprintf("Liquidated %v on %v: %v %v @ %v", position, unicodeMathSans(symbol), side, leavesQty, price)
+						statusText := fmt.Sprintf("Liquidated %v on %v: %v %v @ %v", position, symbol, side, leavesQty, price)
 
 						if tweet, _, err := twitter.Statuses.Update(status, nil); err != nil {
 							log.Println("Failed to tweet:", statusText)
