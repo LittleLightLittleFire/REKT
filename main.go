@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
@@ -150,6 +151,8 @@ func runClient(cfg BotConfig, twitter *twitter.Client, state *State) error {
 
 func main() {
 	log.SetFlags(log.Lshortfile | log.LstdFlags | log.Lmicroseconds)
+
+	rand.Seed(time.Now().UnixNano())
 
 	cfg, err := loadConfig()
 	if err != nil {
