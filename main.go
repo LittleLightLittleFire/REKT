@@ -11,20 +11,8 @@ import (
 
 	"github.com/dghubble/go-twitter/twitter"
 	"github.com/dghubble/oauth1"
-	humanize "github.com/dustin/go-humanize"
 	"github.com/gorilla/websocket"
 	"github.com/hashicorp/errwrap"
-)
-
-const (
-	// Time allowed to write a message to the peer.
-	writeWait = 10 * time.Second
-
-	// Time allowed to read the next pong message from the peer.
-	pongWait = 60 * time.Second
-
-	// Send pings to peer with this period. Must be less than pongWait.
-	pingPeriod = (pongWait * 9) / 10
 )
 
 // BotConfig store the bot configuration.
@@ -54,7 +42,19 @@ func loadConfig() (config BotConfig, err error) {
 	return config, nil
 }
 
-func runClient(cfg BotConfig, twitter *twitter.Client) error {
+// Constants for Websocket
+const (
+	// Time allowed to write a message to the peer.
+	writeWait = 10 * time.Second
+
+	// Time allowed to read the next pong message from the peer.
+	pongWait = 60 * time.Second
+
+	// Send pings to peer with this period. Must be less than pongWait.
+	pingPeriod = (pongWait * 9) / 10
+)
+
+func runClient(cfg BotConfig, twitter *twitter.Client, state *State) error {
 	// Subscribe to the liquidation feed.
 	// https://www.bitmex.com/app/wsAPI
 	var u url.URL
@@ -120,15 +120,20 @@ func runClient(cfg BotConfig, twitter *twitter.Client) error {
 						symbol := innerData["symbol"].(string)
 						side := innerData["side"].(string)
 
-						var position string
-						if side == "Buy" {
-							position = "short"
-						} else {
-							position = "long"
+						l := Liquidation{
+							Price:    price,
+							Quantity: leavesQty,
+							Symbol:   Symbol(symbol),
+							Side:     side,
 						}
 
-						// Liquidated short on XBTUSD: Buy 130170 @ 772.02
-						status := fmt.Sprintf("Liquidated %v on %v: %v %v @ %v", position, symbol, side, humanize.Comma(leavesQty), price)
+						dl := state.Decorate(l)
+						// TODO: fix this: this does a disk write every time we tweet, which isn't too terrible since we barely do a tweet a second
+						if err := state.Save(); err != nil {
+							log.Println("Failed to save state:", err)
+						}
+
+						status := dl.String()
 
 						if tweet, _, err := twitter.Statuses.Update(status, nil); err != nil {
 							log.Println("Failed to tweet:", status)
@@ -151,6 +156,11 @@ func main() {
 		log.Fatal("Unable to load config:", err)
 	}
 
+	state, err := NewState()
+	if err != nil {
+		log.Fatal("Failed to load state:", err)
+	}
+
 	client := twitter.NewClient(oauth1.NewConfig(cfg.TwitterConsumerKey, cfg.TwitterConsumerSecret).Client(oauth1.NoContext, oauth1.NewToken(cfg.TwitterAccessToken, cfg.TwitterTokenSecret)))
 	user, _, err := client.Accounts.VerifyCredentials(nil)
 	if err != nil {
@@ -159,7 +169,7 @@ func main() {
 
 	log.Println("Logged in as:", user.Name)
 
-	if err := runClient(cfg, client); err != nil {
+	if err := runClient(cfg, client, state); err != nil {
 		log.Println("Error:", err)
 	}
 }
