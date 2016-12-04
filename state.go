@@ -205,7 +205,7 @@ func (s *State) Decorate(l Liquidation) DecoratedLiquidation {
 	// Issue the streak
 	streak := s.HighScores.Kills[l.Symbol]
 
-	if now.Unix()-streak.UnixTime > 10 {
+	if now.Unix()-streak.UnixTime > 20 {
 		streak.Count = 0
 	}
 	streak.Count++

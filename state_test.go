@@ -56,7 +56,7 @@ func TestStreaks(t *testing.T) {
 		log.Println(result)
 	}
 
-	time.Sleep(12 * time.Second)
+	time.Sleep(22 * time.Second)
 
 	for i := 0; i < 10; i++ {
 		result := s.Decorate(Liquidation{
@@ -69,7 +69,7 @@ func TestStreaks(t *testing.T) {
 		log.Println(result)
 	}
 
-	time.Sleep(12 * time.Second)
+	time.Sleep(22 * time.Second)
 
 	for i := 0; i < 10; i++ {
 		result := s.Decorate(Liquidation{
