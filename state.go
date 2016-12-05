@@ -262,7 +262,7 @@ func (s *State) Decorate(l Liquidation) DecoratedLiquidation {
 	if streak.Count < 0 {
 		// No streak
 	} else if streak.Count >= len(s.MultiKill) {
-		streakStrRaw = s.MultiKill[len(s.MultiKill)-1] + " x" + strconv.Itoa(streak.Count)
+		streakStrRaw = s.MultiKill[len(s.MultiKill)-1] + " x" + strconv.Itoa(streak.Count+2)
 	} else {
 		streakStrRaw = s.MultiKill[streak.Count]
 	}
