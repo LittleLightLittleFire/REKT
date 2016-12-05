@@ -72,7 +72,7 @@ const (
 )
 
 var medalMap = map[Medal]string{
-	MedalLargestToday: "\U0001F396",
+	MedalLargestToday: "", // Disabled since liquidations are pretty rare
 	MedalLargestWeek:  "\U0001F3C5",
 	MedalLargestMonth: "\U0001F3C6",
 	Medal100k:         "\U0001F4AF",
