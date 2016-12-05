@@ -66,6 +66,7 @@ const (
 	MedalLargestMonth
 
 	Medal100k      // Awarded for every 100k
+	MedalStreak    // Killed as part of a kill streak
 	MedalSecKilled // Killed within two seconds of the previous
 
 	// TODO: More to come
@@ -76,7 +77,8 @@ var medalMap = map[Medal]string{
 	MedalLargestWeek:  "\U0001F3C5",
 	MedalLargestMonth: "\U0001F3C6",
 	Medal100k:         "\U0001F4AF",
-	MedalSecKilled:    "\U0001F525",
+	MedalStreak:       "\U0001F525",
+	MedalSecKilled:    "\U000026A1",
 }
 
 // NewState returns a new state object.
@@ -207,13 +209,16 @@ func (s *State) Decorate(l Liquidation) DecoratedLiquidation {
 	// Issue the streak
 	streak := s.HighScores.Kills[l.Symbol]
 
-	if now.Unix()-streak.UnixTime > 20 {
+	if now.Unix()-streak.UnixTime > 60 {
 		streak.Count = 0
 	}
 	streak.Count++
+	if streak.Count > 2 {
+		medals = append(medals, MedalStreak)
+	}
 
 	// Issue the medal for being Seckilled
-	if now.Unix()-streak.UnixTime <= 2 {
+	if now.Unix()-streak.UnixTime <= 10 {
 		medals = append(medals, MedalSecKilled)
 	}
 
