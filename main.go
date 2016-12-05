@@ -92,7 +92,7 @@ func runClient(cfg BotConfig, twitter *twitter.Client, state *State) error {
 	conn.SetReadDeadline(time.Now().Add(pongWait))
 	conn.SetPongHandler(func(string) error { conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 
-	// The BitMex API may "insert" / "delete / "insert" the order when is able to liquidate at a better price
+	// The BitMex may "insert" / "delete / "insert" the order when it is able to liquidate at a better price
 	// "insert" is sent when the order is submitted
 	// "delete" is sent when the order is executed
 	// It may also "update" the order when the it is amended or partially filled

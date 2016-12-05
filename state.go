@@ -230,8 +230,6 @@ func (s *State) Decorate(l Liquidation) DecoratedLiquidation {
 
 	// USD value:    0 -------- 10k ---------- 50k-------------- 500k --------->
 	// Snark prob:       0%-5%         5%-20%        20%-100%
-	//
-	// Each awarded medal boosts by 5%
 	var issueSnark bool
 
 	usdVal := l.USDValue()
