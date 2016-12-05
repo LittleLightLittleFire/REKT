@@ -184,17 +184,17 @@ func (s *State) Decorate(l Liquidation) DecoratedLiquidation {
 	}
 
 	// Issue medal for each of the periods
-	if l.Quantity > scores.HighestDay {
+	if l.Quantity >= scores.HighestDay {
 		scores.HighestDay = l.Quantity
 		medals = append(medals, MedalLargestToday)
 	}
 
-	if l.Quantity > scores.HighestWeek {
+	if l.Quantity >= scores.HighestWeek {
 		scores.HighestWeek = l.Quantity
 		medals = append(medals, MedalLargestWeek)
 	}
 
-	if l.Quantity > scores.HighestMonth {
+	if l.Quantity >= scores.HighestMonth {
 		scores.HighestMonth = l.Quantity
 		medals = append(medals, MedalLargestMonth)
 	}
