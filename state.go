@@ -213,7 +213,7 @@ func (s *State) Decorate(l Liquidation) DecoratedLiquidation {
 		streak.Count = 0
 	}
 	streak.Count++
-	if streak.Count > 2 {
+	if streak.Count >= 2 {
 		medals = append(medals, MedalStreak)
 	}
 
