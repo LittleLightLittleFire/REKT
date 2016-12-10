@@ -1,0 +1,16 @@
+[Unit]
+Description=REKT
+After=network.target
+
+[Service]
+Type=simple
+User=nobody
+Group=nogroup
+WorkingDirectory=/deploy/
+ExecStart=/deploy/REKT
+RestartSec=5
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+
