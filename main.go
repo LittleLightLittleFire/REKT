@@ -208,6 +208,6 @@ func main() {
 	log.Println("Logged in as:", user.Name)
 
 	if err := runClient(cfg, client, state); err != nil {
-		log.Println("Error:", err)
+		log.Fatal("Error:", err)
 	}
 }

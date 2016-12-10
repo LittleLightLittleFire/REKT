@@ -1,0 +1,3 @@
+* Fetch index prices from bitmex to determine the exact size of the liquidation
+* Refactor state.go
+* Change what happens when the snark text is too long
