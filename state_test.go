@@ -22,8 +22,8 @@ func TestStateSimple(t *testing.T) {
 	}
 
 	// Generate 100k liquidations, expect no panics or errors
-	for i := 0; i < 100; i++ {
-		_ = s.Decorate(Liquidation{
+	for i := 0; i < 100000; i++ {
+		result := s.Decorate(Liquidation{
 			Price:    float64(rand.Intn(i + 1)),
 			Quantity: int64(rand.Intn(100000)),
 			Symbol:   symbols[i%len(symbols)],
@@ -31,7 +31,7 @@ func TestStateSimple(t *testing.T) {
 		}).String()
 
 		// It is a lot easier to test by inspection
-		// log.Println(result)
+		log.Println(result)
 	}
 }
 

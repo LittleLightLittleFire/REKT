@@ -184,11 +184,6 @@ func (s *State) Decorate(l Liquidation) DecoratedLiquidation {
 	}
 
 	// Issue medal for each of the periods
-	if l.Quantity >= scores.HighestDay {
-		scores.HighestDay = l.Quantity
-		medals = append(medals, MedalLargestToday)
-	}
-
 	if l.Quantity >= scores.HighestWeek {
 		scores.HighestWeek = l.Quantity
 		medals = append(medals, MedalLargestWeek)
@@ -228,7 +223,7 @@ func (s *State) Decorate(l Liquidation) DecoratedLiquidation {
 	// Issue the snark
 	// Because we have limited text, we will not be able to issue snark every single time.
 
-	// USD value:    0 -------- 10k ---------- 50k-------------- 500k --------->
+	// USD value:    0 -------- 10k ---------- 50k -------------- 500k --------->
 	// Snark prob:       0%-5%         5%-20%        20%-100%
 	var issueSnark bool
 
@@ -267,12 +262,37 @@ func (s *State) Decorate(l Liquidation) DecoratedLiquidation {
 	streakStr := strings.Replace(streakStrRaw, "$SYMBOL", string(l.Symbol), -1)
 	snarkStr := strings.Replace(snark, "$SYMBOL", string(l.Symbol), -1)
 
-	return DecoratedLiquidation{
+	dl := DecoratedLiquidation{
 		Streak:      streakStr,
 		Medals:      medals,
 		Snark:       snarkStr,
 		Liquidation: l,
 	}
+
+	if dl.IsSnarkTooLong() {
+		dl.Snark = ""
+		// Roll back the snark counter with a 90% chance
+		// This is to prevent it from getting stuck on a really long line of text
+		if rand.Intn(10) != 0 {
+			s.SnarkIndex = (s.SnarkIndex + len(s.Snark) - 1) % len(s.Snark)
+		}
+	}
+
+	return dl
+}
+
+// IsSnarkTooLong calculates if the Tweet is too long to include to Snark.
+func (dl DecoratedLiquidation) IsSnarkTooLong() bool {
+	base := len(dl.Liquidation.String())
+	if len(dl.Medals) > 0 {
+		base += 1 + len(dl.Medals)
+	}
+
+	if dl.Streak != "" {
+		base += 3 + len(dl.Streak)
+	}
+
+	return base+3+len(dl.Snark) > 140
 }
 
 // String implements Stringer.
