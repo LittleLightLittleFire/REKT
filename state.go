@@ -289,10 +289,10 @@ func (dl DecoratedLiquidation) IsSnarkTooLong() bool {
 	}
 
 	if dl.Streak != "" {
-		base += 3 + len(dl.Streak)
+		base += 3 + len([]rune(dl.Streak))
 	}
 
-	return base+3+len(dl.Snark) > 140
+	return base+3+len([]rune(dl.Snark)) > 140
 }
 
 // String implements Stringer.
@@ -307,15 +307,19 @@ func (dl DecoratedLiquidation) String() string {
 		}
 	}
 
-	if dl.Streak != "" {
+	// Write the streak if it exists and there is enough space
+	if dl.Streak != "" && len([]rune(base))+3+len([]rune(dl.Streak)) <= 140 {
 		base += " ~ " + dl.Streak
 	}
 
-	// If the text gets too long, don't bother writing the snark
-	if len(base)+3+len(dl.Snark) < 140 {
-		if dl.Snark != "" {
-			base += " ~ " + dl.Snark
-		}
+	// Write the snark if it exists and there is enough space
+	if dl.Snark != "" && len([]rune(base))+3+len([]rune(dl.Snark)) <= 140 {
+		base += " ~ " + dl.Snark
+	}
+
+	// Final safety guard
+	if len([]rune(base)) > 140 {
+		base = string([]rune(base)[:140])
 	}
 
 	return base
