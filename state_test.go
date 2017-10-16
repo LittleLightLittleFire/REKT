@@ -31,7 +31,7 @@ func TestStateSimple(t *testing.T) {
 	for i := 0; i < 100000; i++ {
 		result := s.Decorate(Liquidation{
 			Price:    float64(rand.Intn(i + 1)),
-			Quantity: int64(rand.Intn(100000)),
+			Quantity: int64(rand.Intn(500000)),
 			Symbol:   symbols[i%len(symbols)],
 			Side:     "Buy",
 		}).String()
@@ -51,7 +51,7 @@ func TestStreaks(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		result := s.Decorate(Liquidation{
 			Price:    float64(rand.Intn(i + 1)),
-			Quantity: int64(rand.Intn(100000)),
+			Quantity: int64(rand.Intn(500000)),
 			Symbol:   "BTCUSD",
 			Side:     "Buy",
 		}).String()
@@ -69,7 +69,7 @@ func TestStreaks(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		result := s.Decorate(Liquidation{
 			Price:    float64(rand.Intn(i + 1)),
-			Quantity: int64(rand.Intn(100000)),
+			Quantity: int64(rand.Intn(500000)),
 			Symbol:   "BTCUSD",
 			Side:     "Buy",
 		}).String()
@@ -83,7 +83,7 @@ func TestStreaks(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		result := s.Decorate(Liquidation{
 			Price:    float64(rand.Intn(i + 1)),
-			Quantity: int64(rand.Intn(100000)),
+			Quantity: int64(rand.Intn(500000)),
 			Symbol:   "BTCUSD",
 			Side:     "Buy",
 		}).String()
@@ -145,7 +145,7 @@ func TestSaveFile(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		result := s.Decorate(Liquidation{
 			Price:    float64(rand.Intn(i + 1)),
-			Quantity: int64(rand.Intn(100000)),
+			Quantity: int64(rand.Intn(500000)),
 			Symbol:   "BTCUSD",
 			Side:     "Buy",
 		}).String()
