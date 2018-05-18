@@ -10,8 +10,8 @@ import (
 // TODO: fix these tests so they work without inspection
 
 func verify(result string, t *testing.T) {
-	if len([]rune(result)) > 140 {
-		t.Fatal("longer than 140 unicode characters")
+	if len([]rune(result)) > twitterLengthLimit {
+		t.Fatal("longer than the length limit")
 	}
 }
 

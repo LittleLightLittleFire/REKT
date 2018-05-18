@@ -72,6 +72,9 @@ const (
 	// TODO: More to come
 )
 
+// Twitter has extended the length limit.
+const twitterLengthLimit = 280
+
 var medalMap = map[Medal]string{
 	MedalLargestToday: "", // Disabled since liquidations are pretty rare
 	MedalLargestWeek:  "\U0001F3C5",
@@ -223,20 +226,18 @@ func (s *State) Decorate(l Liquidation) DecoratedLiquidation {
 	// Issue the snark
 	// Because we have limited text, we will not be able to issue snark every single time.
 
-	// USD value:    0 -------- 10k ---------- 50k ------------ 500k ------------ 2m --------->
-	// Snark prob:       0%           5%-10%         10%-40%           40%-80%
+	// USD value:    0 -------- 100k ------------ 500k ------------ 2m --------->
+	// Snark prob:        0%            10%-20%           20%-50%
 	var issueSnark bool
 
 	usdVal := l.USDValue()
 	switch {
-	case usdVal <= 10000:
+	case usdVal <= 100000:
 		issueSnark = false
-	case usdVal <= 50000:
-		issueSnark = lerp(10000, 50000, usdVal, 0.05, 0.10) > rand.Float64()
 	case usdVal <= 500000:
-		issueSnark = lerp(50000, 500000, usdVal, 0.10, 0.40) > rand.Float64()
+		issueSnark = lerp(50000, 500000, usdVal, 0.10, 0.20) > rand.Float64()
 	default:
-		issueSnark = lerp(500000, 2000000, usdVal, 0.40, 0.80) > rand.Float64()
+		issueSnark = lerp(500000, 2000000, usdVal, 0.20, 0.50) > rand.Float64()
 	}
 
 	var snark string
@@ -294,7 +295,7 @@ func (dl DecoratedLiquidation) IsSnarkTooLong() bool {
 		base += 3 + len([]rune(dl.Streak))
 	}
 
-	return base+3+len([]rune(dl.Snark)) > 140
+	return base+3+len([]rune(dl.Snark)) > twitterLengthLimit
 }
 
 // String implements Stringer.
@@ -310,18 +311,18 @@ func (dl DecoratedLiquidation) String() string {
 	}
 
 	// Write the streak if it exists and there is enough space
-	if dl.Streak != "" && len([]rune(base))+3+len([]rune(dl.Streak)) <= 140 {
+	if dl.Streak != "" && len([]rune(base))+3+len([]rune(dl.Streak)) <= twitterLengthLimit {
 		base += " ~ " + dl.Streak
 	}
 
 	// Write the snark if it exists and there is enough space
-	if dl.Snark != "" && len([]rune(base))+3+len([]rune(dl.Snark)) <= 140 {
+	if dl.Snark != "" && len([]rune(base))+3+len([]rune(dl.Snark)) <= twitterLengthLimit {
 		base += " ~ " + dl.Snark
 	}
 
 	// Final safety guard
-	if len([]rune(base)) > 140 {
-		base = string([]rune(base)[:140])
+	if len([]rune(base)) > twitterLengthLimit {
+		base = string([]rune(base)[:twitterLengthLimit])
 	}
 
 	return base
