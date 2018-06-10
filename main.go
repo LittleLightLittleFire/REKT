@@ -80,7 +80,7 @@ func runClient(cfg BotConfig, twitter *twitter.Client, state *State) error {
 			conn.Close()
 		}()
 
-		for _ = range ticker.C {
+		for range ticker.C {
 			conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
 				return
@@ -164,7 +164,7 @@ func runClient(cfg BotConfig, twitter *twitter.Client, state *State) error {
 						status := dl.String()
 
 						if tweet, _, err := twitter.Statuses.Update(status, nil); err != nil {
-							log.Println("Failed to tweet:", status)
+							log.Println("Failed to tweet:", status, err)
 						} else {
 							log.Printf("Sent tweet: %v: '%v'\n", tweet.IDStr, status)
 						}
