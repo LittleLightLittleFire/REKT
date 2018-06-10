@@ -73,7 +73,7 @@ const (
 )
 
 // Twitter has extended the length limit.
-const twitterLengthLimit = 280
+const twitterLengthLimit = 140
 
 var medalMap = map[Medal]string{
 	MedalLargestToday: "", // Disabled since liquidations are pretty rare
