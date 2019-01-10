@@ -73,7 +73,7 @@ const (
 )
 
 // Twitter has extended the length limit.
-const twitterLengthLimit = 140
+const twitterLengthLimit = 280
 
 var medalMap = map[Medal]string{
 	MedalLargestToday: "", // Disabled since liquidations are pretty rare
@@ -272,58 +272,85 @@ func (s *State) Decorate(l Liquidation) DecoratedLiquidation {
 		Liquidation: l,
 	}
 
-	if dl.IsSnarkTooLong() {
-		dl.Snark = ""
-		// Roll back the snark counter with a 90% chance
-		// This is to prevent it from getting stuck on a really long line of text
-		if rand.Intn(10) != 0 {
-			s.SnarkIndex = (s.SnarkIndex + len(s.Snark) - 1) % len(s.Snark)
-		}
-	}
-
 	return dl
 }
 
-// IsSnarkTooLong calculates if the Tweet is too long to include to Snark.
-func (dl DecoratedLiquidation) IsSnarkTooLong() bool {
-	base := len(dl.Liquidation.String())
-	if len(dl.Medals) > 0 {
-		base += 1 + len(dl.Medals)
+func (dl DecoratedLiquidation) hasMedals() bool {
+	return len(dl.Medals) > 0
+}
+
+func (dl DecoratedLiquidation) hasSnark() bool {
+	return dl.Snark != ""
+}
+
+func (dl DecoratedLiquidation) hasStreak() bool {
+	return dl.Streak != ""
+}
+
+func (dl DecoratedLiquidation) medalsRunes() (result []rune) {
+	if !dl.hasMedals() {
+		return
 	}
 
-	if dl.Streak != "" {
-		base += 3 + len([]rune(dl.Streak))
+	result = append(result, ' ')
+	for _, medal := range dl.Medals {
+		result = append(result, []rune(medalMap[medal])...)
+	}
+	return
+}
+
+func (dl DecoratedLiquidation) streakRunes() []rune {
+	if !dl.hasStreak() {
+		return nil
 	}
 
-	return base+3+len([]rune(dl.Snark)) > twitterLengthLimit
+	return append([]rune(" ~ "), []rune(dl.Streak)...)
+}
+
+func (dl DecoratedLiquidation) snarkRunes() []rune {
+	if !dl.hasSnark() {
+		return nil
+	}
+
+	return append([]rune(" ~ "), []rune(dl.Snark)...)
 }
 
 // String implements Stringer.
 func (dl DecoratedLiquidation) String() string {
-	base := dl.Liquidation.String()
+	// We need to fit our string into the Twitter length
+	// However Twitter documentation is full of shit
+	//     https://developer.twitter.com/en/docs/basics/counting-characters.html
+	// They do not count emojis which are a single unicode codepoint as a single character, they count it as two
+	// The fact is, they've complicated this so much it requires a library (twitter-text) to figure out exactly what length they'll calculate this to be
+	// So erring on the side of safety, we'll count all text in medals as two characters
+	// This leave us with a safety margin of three characters created by ` ~ ` for any emojis in the snark itself
+	base := []rune(dl.Liquidation.String())
 
-	// Add medals
-	if len(dl.Medals) > 0 {
-		base += " "
-		for _, medal := range dl.Medals {
-			base += medalMap[medal]
+	if len(base)+len(dl.medalsRunes())*2+len(dl.streakRunes())+len(dl.snarkRunes()) <= twitterLengthLimit {
+		// It just works
+		base = append(base, dl.medalsRunes()...)
+		base = append(base, dl.streakRunes()...)
+		base = append(base, dl.snarkRunes()...)
+		return string(base)
+	}
+
+	if len(base)+len(dl.medalsRunes())*2+len(dl.snarkRunes()) <= twitterLengthLimit {
+		// We'll do without the streak then
+		base = append(base, dl.medalsRunes()...)
+		base = append(base, dl.snarkRunes()...)
+		return string(base)
+	}
+
+	if len(base)+len(dl.snarkRunes()) <= twitterLengthLimit {
+		medalLength := (twitterLengthLimit - (len(base) + len(dl.snarkRunes()))) / 2
+
+		// We'll trim the medals so that we use up the entire text, unless the medals get trimmed to nothing
+		if medalLength > 3 {
+			base = append(base, dl.medalsRunes()[:medalLength]...)
 		}
+		base = append(base, dl.snarkRunes()...)
+		return string(base)
 	}
 
-	// Write the streak if it exists and there is enough space
-	if dl.Streak != "" && len([]rune(base))+3+len([]rune(dl.Streak)) <= twitterLengthLimit {
-		base += " ~ " + dl.Streak
-	}
-
-	// Write the snark if it exists and there is enough space
-	if dl.Snark != "" && len([]rune(base))+3+len([]rune(dl.Snark)) <= twitterLengthLimit {
-		base += " ~ " + dl.Snark
-	}
-
-	// Final safety guard
-	if len([]rune(base)) > twitterLengthLimit {
-		base = string([]rune(base)[:twitterLengthLimit])
-	}
-
-	return base
+	return string(base)
 }

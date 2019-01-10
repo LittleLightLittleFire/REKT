@@ -55,7 +55,7 @@ const (
 	pingPeriod = (pongWait * 9) / 10
 )
 
-func runClient(cfg BotConfig, twitter *twitter.Client, state *State) error {
+func runClient(cfg BotConfig, client *twitter.Client, state *State) error {
 	// Subscribe to the liquidation feed.
 	// https://www.bitmex.com/app/wsAPI
 	var u url.URL
@@ -163,7 +163,9 @@ func runClient(cfg BotConfig, twitter *twitter.Client, state *State) error {
 
 						status := dl.String()
 
-						if tweet, _, err := twitter.Statuses.Update(status, nil); err != nil {
+						if tweet, _, err := client.Statuses.Update(status, &twitter.StatusUpdateParams{
+							TweetMode: "extended",
+						}); err != nil {
 							log.Println("Failed to tweet:", status, err)
 						} else {
 							log.Printf("Sent tweet: %v: '%v'\n", tweet.IDStr, status)
@@ -181,7 +183,6 @@ func runClient(cfg BotConfig, twitter *twitter.Client, state *State) error {
 			}
 		}
 	}
-
 }
 
 func main() {

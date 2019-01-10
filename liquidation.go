@@ -35,17 +35,13 @@ func (l Liquidation) String() string {
 
 // USDValue returns the USD value of the liquidation.
 func (l Liquidation) USDValue() int64 {
+	// All XBT contracts are in USD
 	if strings.HasPrefix(string(l.Symbol), "XBT") {
 		return l.Quantity
 	}
 
-	// Contract value is 100.00, so it is about right
-	if strings.HasPrefix(string(l.Symbol), "XBJ") {
-		return l.Quantity
-	}
-
-	// Contract value is 10.00, it is not quite right (it's about 7) but close enough
-	if strings.HasPrefix(string(l.Symbol), "XBC") {
+	// ETH swap is also in USD
+	if l.Symbol == "ETHUSD" {
 		return l.Quantity
 	}
 
