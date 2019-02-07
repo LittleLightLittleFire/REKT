@@ -208,7 +208,10 @@ func main() {
 
 	log.Println("Logged in as:", user.Name)
 
-	if err := runClient(cfg, client, state); err != nil {
-		log.Fatal("Error:", err)
+	for {
+		if err := runClient(cfg, client, state); err != nil {
+			log.Println("Error:", err, "reconnecting in 10 seconds")
+			time.Sleep(10 * time.Second)
+		}
 	}
 }
