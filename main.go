@@ -60,7 +60,7 @@ const (
 	pingPeriod = (pongWait * 9) / 10
 )
 
-func runClient(cfg BotConfig, client *twitter.Client, liqChan chan Liquidation) error {
+func runClient(cfg BotConfig, liqChan chan Liquidation) error {
 	// Subscribe to the liquidation feed.
 	// https://www.bitmex.com/app/wsAPI
 	var u url.URL
@@ -344,7 +344,7 @@ func main() {
 	go liquidator(liqChan, state, client)
 
 	for {
-		if err := runClient(cfg, client, liqChan); err != nil {
+		if err := runClient(cfg, liqChan); err != nil {
 			log.Println("Error:", err, "reconnecting in 10 seconds")
 			time.Sleep(10 * time.Second)
 		}
