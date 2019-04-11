@@ -299,7 +299,12 @@ func liquidator(liqChan <-chan Liquidation, state *State, client *twitter.Client
 	}()
 
 	for l := range liqChan {
-		log.Printf("Detected liqidation: %+v\n", l)
+		if l.AmendUp {
+			log.Printf("Detected liquidation (amend): %+v\n", l)
+		} else {
+			log.Printf("Detected liquidation: %+v\n", l)
+		}
+
 		if channels[l.Symbol] == nil {
 			channels[l.Symbol] = make(chan Liquidation, 10000)
 			go symbolLiquidator(state, channels[l.Symbol], tweetChan)
