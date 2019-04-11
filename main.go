@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -9,6 +10,10 @@ import (
 	"net/url"
 	"os"
 	"time"
+
+	_ "net/http/pprof"
+
+	"golang.org/x/time/rate"
 
 	"github.com/dghubble/go-twitter/twitter"
 	"github.com/dghubble/oauth1"
@@ -55,7 +60,7 @@ const (
 	pingPeriod = (pongWait * 9) / 10
 )
 
-func runClient(cfg BotConfig, client *twitter.Client, state *State) error {
+func runClient(cfg BotConfig, client *twitter.Client, liqChan chan Liquidation) error {
 	// Subscribe to the liquidation feed.
 	// https://www.bitmex.com/app/wsAPI
 	var u url.URL
@@ -96,11 +101,7 @@ func runClient(cfg BotConfig, client *twitter.Client, state *State) error {
 	// "insert" is sent when the order is submitted
 	// "delete" is sent when the order is executed
 	// It may also "update" the order when the it is amended or partially filled
-	// The following sequence is possible: insert ..... update ..... delete/insert ..... update ..... delete/insert ..... delete
-	// ..... indicated a posssible time delay
-
-	// Thus we need to keep track of when the order was last deleted and purge it as neccessary
-	lastDelete := make(map[string]time.Time)
+	liquidations := make(map[string]Liquidation)
 
 	for {
 		var data map[string]interface{}
@@ -112,7 +113,9 @@ func runClient(cfg BotConfig, client *twitter.Client, state *State) error {
 			return fmt.Errorf("error in API response: %v", err)
 		}
 
-		log.Printf("%#v\n", data)
+		// Print JSON so it is parsable later
+		rawJSON, _ := json.Marshal(data)
+		log.Println(string(rawJSON))
 
 		if table, ok := data["table"]; ok {
 			switch table {
@@ -127,11 +130,53 @@ func runClient(cfg BotConfig, client *twitter.Client, state *State) error {
 						innerData := innerData.(map[string]interface{})
 						orderID := innerData["orderID"].(string)
 
-						lastDelete[orderID] = time.Now()
+						delete(liquidations, orderID)
 					}
 
 				case "update":
-					// The liquidation may amended by bitmex (position may be reduced or price changed)
+					// The liquidation may amended by BitMEX (position may be reduced or price changed)
+					for _, innerData := range innerDataList {
+						innerData := innerData.(map[string]interface{})
+
+						orderID := innerData["orderID"].(string)
+
+						originalLiq := liquidations[orderID]
+						amendedLiq := liquidations[orderID]
+
+						if innerData["price"] != nil {
+							amendedLiq.Price = innerData["price"].(float64)
+						}
+
+						if innerData["leavesQty"] != nil {
+							amendedLiq.Quantity = int64(innerData["leavesQty"].(float64))
+						}
+
+						if innerData["symbol"] != nil {
+							amendedLiq.Symbol = Symbol(innerData["symbol"].(string))
+						}
+
+						if innerData["side"] != nil {
+							amendedLiq.Side = innerData["side"].(string)
+						}
+
+						difference := amendedLiq.Quantity - originalLiq.Quantity
+
+						// Check if BitMEX is increasing the size if the liquidation order: it means more positions were liquidated
+						if difference > 0 {
+							// Output a new liquidation based on this difference
+							liqChan <- Liquidation{
+								PriceQuantity: PriceQuantity{
+									Price:    amendedLiq.Price,
+									Quantity: difference,
+								},
+								Symbol:  Symbol(amendedLiq.Symbol),
+								Side:    amendedLiq.Side,
+								AmendUp: true,
+							}
+						}
+
+						liquidations[orderID] = amendedLiq
+					}
 
 				case "insert":
 					for _, innerData := range innerDataList {
@@ -143,45 +188,124 @@ func runClient(cfg BotConfig, client *twitter.Client, state *State) error {
 						side := innerData["side"].(string)
 						orderID := innerData["orderID"].(string)
 
-						// Check if this is an insert after a delete
-						if _, ok := lastDelete[orderID]; ok {
-							continue
-						}
-
 						l := Liquidation{
-							Price:    price,
-							Quantity: leavesQty,
-							Symbol:   Symbol(symbol),
-							Side:     side,
+							PriceQuantity: PriceQuantity{
+								Price:    price,
+								Quantity: leavesQty,
+							},
+							Symbol: Symbol(symbol),
+							Side:   side,
 						}
 
-						dl := state.Decorate(l)
-						// TODO: fix this: this does a disk write every time we tweet, which isn't too terrible since we barely do a tweet a second
-						if err := state.Save(); err != nil {
-							log.Println("Failed to save state:", err)
-						}
-
-						status := dl.String()
-
-						if tweet, _, err := client.Statuses.Update(status, &twitter.StatusUpdateParams{
-							TweetMode: "extended",
-						}); err != nil {
-							log.Println("Failed to tweet:", status, err)
-						} else {
-							log.Printf("Sent tweet: %v: '%v'\n", tweet.IDStr, status)
-						}
+						liquidations[orderID] = l
+						liqChan <- l
 					}
 				}
 			}
 		}
+	}
+}
 
-		// Purge expired orders so we don't hemorrhage memory
-		now := time.Now()
-		for orderID, timestamp := range lastDelete {
-			if now.Sub(timestamp) > 10*time.Second {
-				delete(lastDelete, orderID)
+func symbolLiquidator(state *State, liqChan <-chan Liquidation, tweetChan chan<- string) {
+	flusher := time.NewTicker(10 * time.Second)
+	defer flusher.Stop()
+
+	var unsentLiquidation *CombinedLiquidation
+	var unsentReceivedAt time.Time
+
+	tweet := func(cl CombinedLiquidation) {
+		decoration := state.Decorate(cl)
+		status := decoration.Apply(cl.String())
+		tweetChan <- status
+	}
+
+	for {
+		select {
+		case <-flusher.C:
+			if unsentLiquidation == nil {
+				continue
+			}
+
+			if time.Now().Sub(unsentReceivedAt) < 15*time.Second {
+				continue
+			}
+
+			// Flush out the current tweet
+			tweet(*unsentLiquidation)
+			unsentLiquidation = nil
+
+		case l, ok := <-liqChan:
+			if !ok {
+				return
+			}
+
+			log.Println("Got", l)
+			if unsentLiquidation == nil {
+				combined := l.ToCombined()
+				unsentLiquidation = &combined
+				unsentReceivedAt = time.Now()
+				continue
+			}
+
+			// Try and combine
+			if unsentLiquidation.CanCombine(l) {
+				log.Println("Combining", unsentLiquidation)
+				log.Println("With", l)
+				unsentLiquidation.Combine(l)
+				log.Println("Into", unsentLiquidation)
+				continue
+			} else {
+				log.Println("Can't combine", unsentLiquidation, l)
+			}
+
+			// Tweet the existing liquidation if it cannot be combined
+			tweet(*unsentLiquidation)
+			combined := l.ToCombined()
+
+			unsentLiquidation = &combined
+			unsentReceivedAt = time.Now()
+		}
+	}
+}
+
+func liquidator(liqChan <-chan Liquidation, state *State, client *twitter.Client) {
+	tweetChan := make(chan string, 10000)
+	defer close(tweetChan)
+	go func() {
+		// https://developer.twitter.com/en/docs/basics/rate-limits
+		// 300 tweets in 3 hours -> 100 tweets in 1 hour -> 100 tweets in 3600s
+		// -> 36 seconds between every tweet
+		limiter := rate.NewLimiter(rate.Every(36*time.Second), 300)
+		for status := range tweetChan {
+			// Apply the rate limit
+			_ = limiter.Wait(context.Background())
+
+			if tweet, _, err := client.Statuses.Update(status, &twitter.StatusUpdateParams{
+				TweetMode: "extended",
+			}); err != nil {
+				log.Println("Failed to tweet:", status, err)
+			} else {
+				log.Printf("Sent tweet: %v: '%v'\n", tweet.IDStr, status)
 			}
 		}
+	}()
+
+	// Demultiplex this channel by the tickers
+	channels := make(map[Symbol]chan Liquidation)
+	defer func() {
+		for _, c := range channels {
+			close(c)
+		}
+	}()
+
+	for l := range liqChan {
+		log.Printf("Detected liqidation: %+v\n", l)
+		if channels[l.Symbol] == nil {
+			channels[l.Symbol] = make(chan Liquidation, 10000)
+			go symbolLiquidator(state, channels[l.Symbol], tweetChan)
+		}
+
+		channels[l.Symbol] <- l
 	}
 }
 
@@ -189,6 +313,11 @@ func main() {
 	log.SetFlags(log.Lshortfile | log.LstdFlags | log.Lmicroseconds)
 
 	rand.Seed(time.Now().UnixNano())
+
+	go func() {
+		log.Println("Listening on localhost:6060 (pprof)")
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
 
 	cfg, err := loadConfig()
 	if err != nil {
@@ -208,8 +337,14 @@ func main() {
 
 	log.Println("Logged in as:", user.Name)
 
+	// Start the liquidator
+	liqChan := make(chan Liquidation, 1024)
+	defer close(liqChan)
+
+	go liquidator(liqChan, state, client)
+
 	for {
-		if err := runClient(cfg, client, state); err != nil {
+		if err := runClient(cfg, client, liqChan); err != nil {
 			log.Println("Error:", err, "reconnecting in 10 seconds")
 			time.Sleep(10 * time.Second)
 		}

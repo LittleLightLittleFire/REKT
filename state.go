@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -21,6 +22,8 @@ type (
 		SnarkIndex int
 
 		MultiKill []string
+
+		sync.Mutex
 	}
 
 	// Scores for a particular symbol.
@@ -50,12 +53,11 @@ type (
 	// A Medal is awarded to the liquidation if it breaks a high score.
 	Medal int32
 
-	// DecoratedLiquidation gives liqudation extra properties based on its timing and size.
-	DecoratedLiquidation struct {
-		Streak      string      // Multikills
-		Medals      []Medal     // Medals
-		Snark       string      // Snarky meme text to salt the wound
-		Liquidation Liquidation // Actual liquidiation
+	// Decoration attached to a liquidation.
+	Decoration struct {
+		Streak string  // Multikills
+		Medals []Medal // Medals
+		Snark  string  // Snarky meme text to salt the wound
 	}
 )
 
@@ -142,8 +144,8 @@ func (s *State) resetSnark() {
 	}
 }
 
-// Save stores the high scores back to disk.
-func (s *State) Save() error {
+// save stores the high scores back to disk.
+func (s *State) save() error {
 	f, err := os.OpenFile(s.SaveFile, os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		return err
@@ -162,11 +164,17 @@ func lerp(x, y, z int64, start, end float64) float64 {
 	return start + ((float64(z)-float64(x))/(float64(y)-float64(x)))*(end-start)
 }
 
-// Decorate a new liqudation.
-func (s *State) Decorate(l Liquidation) DecoratedLiquidation {
+// Decorate a new liquidation.
+func (s *State) Decorate(cl CombinedLiquidation) Decoration {
+	s.Lock()
+	defer s.Unlock()
+
+	// Save the state
+	defer s.save()
+
 	// Hand out medals
 	var medals []Medal
-	scores := s.HighScores.Scores[l.Symbol]
+	scores := s.HighScores.Scores[cl.Symbol]
 
 	// Expire the scores if their time has reached
 	now := time.Now()
@@ -186,26 +194,28 @@ func (s *State) Decorate(l Liquidation) DecoratedLiquidation {
 		scores.HighestMonth = 0
 	}
 
+	maxQuantity := cl.MaxQuantity()
+
 	// Issue medal for each of the periods
-	if l.Quantity >= scores.HighestWeek {
-		scores.HighestWeek = l.Quantity
+	if maxQuantity >= scores.HighestWeek {
+		scores.HighestWeek = maxQuantity
 		medals = append(medals, MedalLargestWeek)
 	}
 
-	if l.Quantity >= scores.HighestMonth {
-		scores.HighestMonth = l.Quantity
+	if maxQuantity >= scores.HighestMonth {
+		scores.HighestMonth = maxQuantity
 		medals = append(medals, MedalLargestMonth)
 	}
 
 	// Award the 100k medals
-	for i := int64(0); i < l.Quantity/100000; i++ {
+	for i := int64(0); i < maxQuantity/100000; i++ {
 		medals = append(medals, Medal100k)
 	}
 
-	s.HighScores.Scores[l.Symbol] = scores
+	s.HighScores.Scores[cl.Symbol] = scores
 
 	// Issue the streak
-	streak := s.HighScores.Kills[l.Symbol]
+	streak := s.HighScores.Kills[cl.Symbol]
 
 	if now.Unix()-streak.UnixTime > 60 {
 		streak.Count = 0
@@ -221,7 +231,7 @@ func (s *State) Decorate(l Liquidation) DecoratedLiquidation {
 	}
 
 	streak.UnixTime = now.Unix()
-	s.HighScores.Kills[l.Symbol] = streak
+	s.HighScores.Kills[cl.Symbol] = streak
 
 	// Issue the snark
 	// Because we have limited text, we will not be able to issue snark every single time.
@@ -230,7 +240,7 @@ func (s *State) Decorate(l Liquidation) DecoratedLiquidation {
 	// Snark prob:        0%            8%-15%           15%-40%
 	var issueSnark bool
 
-	usdVal := l.USDValue()
+	usdVal := cl.USDValue()
 	switch {
 	case usdVal <= 100000:
 		issueSnark = false
@@ -262,61 +272,58 @@ func (s *State) Decorate(l Liquidation) DecoratedLiquidation {
 	} else {
 		streakStrRaw = s.MultiKill[streak.Count]
 	}
-	streakStr := strings.Replace(streakStrRaw, "$SYMBOL", string(l.Symbol), -1)
-	snarkStr := strings.Replace(snark, "$SYMBOL", string(l.Symbol), -1)
+	streakStr := strings.Replace(streakStrRaw, "$SYMBOL", string(cl.Symbol), -1)
+	snarkStr := strings.Replace(snark, "$SYMBOL", string(cl.Symbol), -1)
 
-	dl := DecoratedLiquidation{
-		Streak:      streakStr,
-		Medals:      medals,
-		Snark:       snarkStr,
-		Liquidation: l,
+	return Decoration{
+		Streak: streakStr,
+		Medals: medals,
+		Snark:  snarkStr,
 	}
-
-	return dl
 }
 
-func (dl DecoratedLiquidation) hasMedals() bool {
-	return len(dl.Medals) > 0
+func (d Decoration) hasMedals() bool {
+	return len(d.Medals) > 0
 }
 
-func (dl DecoratedLiquidation) hasSnark() bool {
-	return dl.Snark != ""
+func (d Decoration) hasSnark() bool {
+	return d.Snark != ""
 }
 
-func (dl DecoratedLiquidation) hasStreak() bool {
-	return dl.Streak != ""
+func (d Decoration) hasStreak() bool {
+	return d.Streak != ""
 }
 
-func (dl DecoratedLiquidation) medalsRunes() (result []rune) {
-	if !dl.hasMedals() {
+func (d Decoration) medalsRunes() (result []rune) {
+	if !d.hasMedals() {
 		return
 	}
 
 	result = append(result, ' ')
-	for _, medal := range dl.Medals {
+	for _, medal := range d.Medals {
 		result = append(result, []rune(medalMap[medal])...)
 	}
 	return
 }
 
-func (dl DecoratedLiquidation) streakRunes() []rune {
-	if !dl.hasStreak() {
+func (d Decoration) streakRunes() []rune {
+	if !d.hasStreak() {
 		return nil
 	}
 
-	return append([]rune(" ~ "), []rune(dl.Streak)...)
+	return append([]rune(" ~ "), []rune(d.Streak)...)
 }
 
-func (dl DecoratedLiquidation) snarkRunes() []rune {
-	if !dl.hasSnark() {
+func (d Decoration) snarkRunes() []rune {
+	if !d.hasSnark() {
 		return nil
 	}
 
-	return append([]rune(" ~ "), []rune(dl.Snark)...)
+	return append([]rune(" ~ "), []rune(d.Snark)...)
 }
 
-// String implements Stringer.
-func (dl DecoratedLiquidation) String() string {
+// Apply the decoratino to a liquidation string.
+func (d Decoration) Apply(liquidation string) string {
 	// We need to fit our string into the Twitter length
 	// However Twitter documentation is full of shit
 	//     https://developer.twitter.com/en/docs/basics/counting-characters.html
@@ -324,31 +331,31 @@ func (dl DecoratedLiquidation) String() string {
 	// The fact is, they've complicated this so much it requires a library (twitter-text) to figure out exactly what length they'll calculate this to be
 	// So erring on the side of safety, we'll count all text in medals as two characters
 	// This leave us with a safety margin of three characters created by ` ~ ` for any emojis in the snark itself
-	base := []rune(dl.Liquidation.String())
+	base := []rune(liquidation)
 
-	if len(base)+len(dl.medalsRunes())*2+len(dl.streakRunes())+len(dl.snarkRunes()) <= twitterLengthLimit {
+	if len(base)+len(d.medalsRunes())*2+len(d.streakRunes())+len(d.snarkRunes()) <= twitterLengthLimit {
 		// It just works
-		base = append(base, dl.medalsRunes()...)
-		base = append(base, dl.streakRunes()...)
-		base = append(base, dl.snarkRunes()...)
+		base = append(base, d.medalsRunes()...)
+		base = append(base, d.streakRunes()...)
+		base = append(base, d.snarkRunes()...)
 		return string(base)
 	}
 
-	if len(base)+len(dl.medalsRunes())*2+len(dl.snarkRunes()) <= twitterLengthLimit {
+	if len(base)+len(d.medalsRunes())*2+len(d.snarkRunes()) <= twitterLengthLimit {
 		// We'll do without the streak then
-		base = append(base, dl.medalsRunes()...)
-		base = append(base, dl.snarkRunes()...)
+		base = append(base, d.medalsRunes()...)
+		base = append(base, d.snarkRunes()...)
 		return string(base)
 	}
 
-	if len(base)+len(dl.snarkRunes()) <= twitterLengthLimit {
-		medalLength := (twitterLengthLimit - (len(base) + len(dl.snarkRunes()))) / 2
+	if len(base)+len(d.snarkRunes()) <= twitterLengthLimit {
+		medalLength := (twitterLengthLimit - (len(base) + len(d.snarkRunes()))) / 2
 
 		// We'll trim the medals so that we use up the entire text, unless the medals get trimmed to nothing
 		if medalLength > 3 {
-			base = append(base, dl.medalsRunes()[:medalLength]...)
+			base = append(base, d.medalsRunes()[:medalLength]...)
 		}
-		base = append(base, dl.snarkRunes()...)
+		base = append(base, d.snarkRunes()...)
 		return string(base)
 	}
 

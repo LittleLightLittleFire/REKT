@@ -1,4 +1,6 @@
 REKT
+analysis/
 deploy.sh
+deploy-stage.sh
 *.json
 *.swp

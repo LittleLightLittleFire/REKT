@@ -1,3 +1,7 @@
 * Fetch index prices from bitmex to determine the exact size of the liquidation
 * Refactor state.go
 * Change what happens when the snark text is too long
+
+Respect twitter status update limits
+Liquidation orders can be amended up upon new liquidations, take this inot account
+Group liquidations orders together to prevent spam
