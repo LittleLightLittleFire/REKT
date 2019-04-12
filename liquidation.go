@@ -87,9 +87,9 @@ func (cl CombinedLiquidation) CanCombine(l Liquidation) bool {
 			return false
 		}
 
-		// If this has the same magnitude as the cap
+		// If this has nearly the same magnitude as the cap
 		// Then apply higher magnitude requirements
-		if m1 == sm || m2 == sm {
+		if m1 >= sm-1 || m2 >= sm-1 {
 			if m1 != m2 {
 				return false
 			}
