@@ -74,7 +74,7 @@ func (cl CombinedLiquidation) CanCombine(l Liquidation) bool {
 	}
 
 	// Acceptable merge groups
-	mergeGroups := []int{1, 100, 500, 1000, 5000, 10000, 50000, 100000, 250000}
+	mergeGroups := []int{1, 100, 999, 9999, 99999, 250000}
 
 	for _, l2 := range cl.Liquidations {
 		if sort.SearchInts(mergeGroups, int(l.Quantity)) != sort.SearchInts(mergeGroups, int(l2.Quantity)) {
