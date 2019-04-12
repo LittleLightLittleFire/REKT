@@ -38,11 +38,8 @@ type (
 )
 
 const (
-	// MaxUSDMergable liquidations larger than this size will not be merged.
-	MaxUSDMergable = 750000
-
 	// MaxCombinedPositions caps the number of liquidations that can be combined into a single tweet.
-	MaxCombinedPositions = 5
+	MaxCombinedPositions = 3
 )
 
 // ToCombined converts a single liquidation to a combined liquidation.
@@ -152,13 +149,13 @@ func (s Symbol) IsUSDContract() bool {
 func (s Symbol) MaxQuantityMergable() int64 {
 	switch {
 	case s.IsUSDContract():
-		return 750000
+		return 250000
 	case s == "ETHUSD":
-		return 750000
+		return 500000
 	case strings.HasPrefix(string(s), "ADA"):
-		return 7500000
+		return 5000000
 	case strings.HasPrefix(string(s), "TRX"):
-		return 7500000
+		return 5000000
 	default:
 		return 1000000
 	}
