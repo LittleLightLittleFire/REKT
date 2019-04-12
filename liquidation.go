@@ -70,6 +70,14 @@ func (cl CombinedLiquidation) CanCombine(l Liquidation) bool {
 		return false
 	}
 
+	if cl.IsUSDContract() {
+		for _, l2 := range cl.Liquidations {
+			if l2.Quantity > MaxUSDMergable {
+				return false
+			}
+		}
+	}
+
 	if l.IsUSDContract() && l.Quantity > MaxUSDMergable {
 		return false
 	}
