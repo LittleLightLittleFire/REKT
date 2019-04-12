@@ -139,8 +139,6 @@ func runClient(cfg BotConfig, liqChan chan Liquidation) error {
 						innerData := innerData.(map[string]interface{})
 
 						orderID := innerData["orderID"].(string)
-
-						originalLiq := liquidations[orderID]
 						amendedLiq := liquidations[orderID]
 
 						if innerData["price"] != nil {
@@ -157,22 +155,6 @@ func runClient(cfg BotConfig, liqChan chan Liquidation) error {
 
 						if innerData["side"] != nil {
 							amendedLiq.Side = innerData["side"].(string)
-						}
-
-						difference := amendedLiq.Quantity - originalLiq.Quantity
-
-						// Check if BitMEX is increasing the size if the liquidation order: it means more positions were liquidated
-						if difference > 0 {
-							// Output a new liquidation based on this difference
-							liqChan <- Liquidation{
-								PriceQuantity: PriceQuantity{
-									Price:    amendedLiq.Price,
-									Quantity: difference,
-								},
-								Symbol:  Symbol(amendedLiq.Symbol),
-								Side:    amendedLiq.Side,
-								AmendUp: true,
-							}
 						}
 
 						liquidations[orderID] = amendedLiq
