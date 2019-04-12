@@ -44,11 +44,6 @@ const (
 	MaxCombinedPositions = 5
 )
 
-// IsUSDContract returns if the contract is in USD.
-func (l Liquidation) IsUSDContract() bool {
-	return strings.HasPrefix(string(l.Symbol), "XBT")
-}
-
 // ToCombined converts a single liquidation to a combined liquidation.
 func (l Liquidation) ToCombined() CombinedLiquidation {
 	return CombinedLiquidation{
@@ -70,15 +65,13 @@ func (cl CombinedLiquidation) CanCombine(l Liquidation) bool {
 		return false
 	}
 
-	if cl.IsUSDContract() {
-		for _, l2 := range cl.Liquidations {
-			if l2.Quantity > MaxUSDMergable {
-				return false
-			}
+	for _, l2 := range cl.Liquidations {
+		if l2.Quantity > cl.Symbol.MaxQuantityMergable() {
+			return false
 		}
 	}
 
-	if l.IsUSDContract() && l.Quantity > MaxUSDMergable {
+	if l.Quantity > l.Symbol.MaxQuantityMergable() {
 		return false
 	}
 
@@ -106,16 +99,6 @@ func (l Liquidation) String() string {
 
 	// Liquidated short on XBTUSD: Buy 130170 @ 772.02
 	return fmt.Sprintf("Liquidated %v on %v: %v %v @ %v", position, l.Symbol, l.Side, humanize.Comma(l.Quantity), l.Price)
-}
-
-// USDValue returns the USD value of the liquidation.
-func (l Liquidation) USDValue() int64 {
-	// All XBT contracts are in USD
-	if l.IsUSDContract() {
-		return l.Quantity
-	}
-
-	return 0
 }
 
 // String implements Stringer.
@@ -147,15 +130,30 @@ func (cl CombinedLiquidation) String() string {
 	return fmt.Sprintf("Liquidated %v on %v: %v %s", position, cl.Symbol, cl.Side, cp)
 }
 
-// IsUSDContract return if the contract is in USD sizes.
-func (cl CombinedLiquidation) IsUSDContract() bool {
-	return strings.HasPrefix(string(cl.Symbol), "XBT")
+// IsUSDContract returns the USD value of this contract.
+func (s Symbol) IsUSDContract() bool {
+	return strings.HasPrefix(string(s), "XBT")
+}
+
+// MaxQuantityMergable returns the maximum size mergable for this symbol.
+func (s Symbol) MaxQuantityMergable() int64 {
+	switch {
+	case s.IsUSDContract():
+		return 750000
+	case s == "ETHUSD":
+		return 750000
+	case strings.HasPrefix(string(s), "ADA"):
+		return 7500000
+	case strings.HasPrefix(string(s), "TRX"):
+		return 7500000
+	default:
+		return 1000000
+	}
 }
 
 // USDValue returns the USD value of the liquidation.
 func (cl CombinedLiquidation) USDValue() int64 {
-	// All XBT contracts are in USD
-	if cl.IsUSDContract() {
+	if cl.Symbol.IsUSDContract() {
 		total := int64(0)
 		for _, x := range cl.Liquidations {
 			total += x.Quantity
