@@ -75,13 +75,32 @@ func (cl CombinedLiquidation) CanCombine(l Liquidation) bool {
 
 	// Run an order of magnitude check
 	// Reject the merge if the numbers are too different
-	magnitude := func(qty int64) float64 {
-		return float64(len(fmt.Sprint(qty)))
+	magnitude := func(qty int64) int {
+		return len(fmt.Sprint(qty))
+	}
+
+	magnitudeMergable := func(q1, q2 int64) bool {
+		sm := magnitude(cl.Symbol.MaxQuantityMergable())
+		m1, m2 := magnitude(q1), magnitude(q2)
+
+		if math.Abs(float64(m1-m2)) > 1 {
+			return false
+		}
+
+		// If this has the same magnitude as the cap
+		// Then apply higher magnitude requirements
+		if m1 == sm || m2 == sm {
+			if m1 != m2 {
+				return false
+			}
+		}
+
+		return true
 	}
 
 	for _, l2 := range cl.Liquidations {
-		if math.Abs(magnitude(l.Quantity)-magnitude(l2.Quantity)) > 1 {
-			return false
+		if magnitudeMergable(l.Quantity, l2.Quantity) {
+			continue
 		}
 	}
 
