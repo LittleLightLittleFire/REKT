@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 
 	humanize "github.com/dustin/go-humanize"
@@ -73,6 +74,18 @@ func (cl CombinedLiquidation) CanCombine(l Liquidation) bool {
 
 	if l.Quantity > l.Symbol.MaxQuantityMergable() {
 		return false
+	}
+
+	// Run an order of magnitude check
+	// Reject the merge if the numbers are too different
+	magnitude := func(qty int64) float64 {
+		return float64(len(fmt.Sprint(qty)))
+	}
+
+	for _, l2 := range cl.Liquidations {
+		if math.Abs(magnitude(l.Quantity)-magnitude(l2.Quantity)) > 1 {
+			return false
+		}
 	}
 
 	return true
