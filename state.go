@@ -220,7 +220,7 @@ func (s *State) Decorate(cl CombinedLiquidation) Decoration {
 	if now.Unix()-streak.UnixTime > 60 {
 		streak.Count = 0
 	}
-	streak.Count++
+	streak.Count += len(cl.Liquidations)
 	if streak.Count >= 2 {
 		medals = append(medals, MedalStreak)
 	}
