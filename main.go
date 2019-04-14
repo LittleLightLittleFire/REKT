@@ -194,11 +194,20 @@ func symbolLiquidator(state *State, liqChan <-chan Liquidation, tweetChan chan<-
 
 	var unsentLiquidation *CombinedLiquidation
 	var unsentReceivedAt time.Time
+	var unsentCombiningDelay time.Duration
 
 	tweet := func(cl CombinedLiquidation) {
 		decoration := state.Decorate(cl)
 		status := decoration.Apply(cl.String())
 		tweetChan <- status
+	}
+
+	newUnsent := func(l Liquidation) {
+		combined := l.ToCombined()
+
+		unsentLiquidation = &combined
+		unsentReceivedAt = time.Now()
+		unsentCombiningDelay = l.CombiningDelay()
 	}
 
 	for {
@@ -208,7 +217,7 @@ func symbolLiquidator(state *State, liqChan <-chan Liquidation, tweetChan chan<-
 				continue
 			}
 
-			if time.Now().Sub(unsentReceivedAt) < 15*time.Second {
+			if time.Now().Sub(unsentReceivedAt) < unsentCombiningDelay {
 				continue
 			}
 
@@ -223,9 +232,7 @@ func symbolLiquidator(state *State, liqChan <-chan Liquidation, tweetChan chan<-
 
 			log.Println("Got", l)
 			if unsentLiquidation == nil {
-				combined := l.ToCombined()
-				unsentLiquidation = &combined
-				unsentReceivedAt = time.Now()
+				newUnsent(l)
 				continue
 			}
 
@@ -242,10 +249,7 @@ func symbolLiquidator(state *State, liqChan <-chan Liquidation, tweetChan chan<-
 
 			// Tweet the existing liquidation if it cannot be combined
 			tweet(*unsentLiquidation)
-			combined := l.ToCombined()
-
-			unsentLiquidation = &combined
-			unsentReceivedAt = time.Now()
+			newUnsent(l)
 		}
 	}
 }

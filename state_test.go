@@ -23,12 +23,9 @@ func TestSymbolLiquidator(t *testing.T) {
 
 	liqChan := make(chan Liquidation)
 	tweetChan := make(chan string)
-	doneChan := make(chan struct{})
 	go symbolLiquidator(s, liqChan, tweetChan)
 
 	go func() {
-		defer close(doneChan)
-
 		for result := range tweetChan {
 			// It is a lot easier to test by inspection
 			log.Println(result)
@@ -41,7 +38,7 @@ func TestSymbolLiquidator(t *testing.T) {
 		l := Liquidation{
 			PriceQuantity: PriceQuantity{
 				Price:    float64(5000 + rand.Intn(i+1)),
-				Quantity: int64(rand.Intn(500000)),
+				Quantity: int64(rand.Intn(10)) + 1,
 			},
 			Symbol: "XBTUSD",
 			Side:   "Buy",
@@ -50,8 +47,6 @@ func TestSymbolLiquidator(t *testing.T) {
 		liqChan <- l
 	}
 	close(liqChan)
-	close(tweetChan)
-	<-doneChan
 }
 
 func TestStateSimple(t *testing.T) {

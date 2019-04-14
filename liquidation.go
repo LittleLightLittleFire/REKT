@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	humanize "github.com/dustin/go-humanize"
 )
@@ -158,6 +159,20 @@ func (s Symbol) MaxQuantityMergable() int64 {
 	}
 }
 
+// CombiningDelay is the minimum time to wait for another liquidation to combine with.
+// Small positions incur longer combining delays
+func (l Liquidation) CombiningDelay() time.Duration {
+	if l.Quantity < 1000 {
+		return 30 * time.Second
+	} else if l.Quantity < 25000 {
+		return 20 * time.Second
+	} else if l.Quantity < 125000 {
+		return 15 * time.Second
+	} else {
+		return 10 * time.Second
+	}
+}
+
 // USDValue returns the USD value of the liquidation.
 func (cl CombinedLiquidation) USDValue() int64 {
 	if cl.Symbol.IsUSDContract() {
@@ -190,4 +205,20 @@ func (cl CombinedLiquidation) MaxQuantity() (max int64) {
 	}
 
 	return max
+}
+
+// MinQuantity of a combined liquidation.
+func (cl CombinedLiquidation) MinQuantity() (min int64) {
+	if len(cl.Liquidations) == 0 {
+		return 0
+	}
+
+	min = cl.Liquidations[0].Quantity
+	for _, q := range cl.Liquidations {
+		if q.Quantity < min {
+			min = q.Quantity
+		}
+	}
+
+	return min
 }

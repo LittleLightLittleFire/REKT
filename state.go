@@ -71,6 +71,8 @@ const (
 	MedalStreak    // Killed as part of a kill streak
 	MedalSecKilled // Killed within two seconds of the previous
 
+	MedalOne // For the very small 1 position liquidations
+
 	// TODO: More to come
 )
 
@@ -84,6 +86,7 @@ var medalMap = map[Medal]string{
 	Medal100k:         "\U0001F4AF",
 	MedalStreak:       "\U0001F525",
 	MedalSecKilled:    "\U000026A1",
+	MedalOne:          "\U0001F947",
 }
 
 // NewState returns a new state object.
@@ -174,6 +177,12 @@ func (s *State) Decorate(cl CombinedLiquidation) Decoration {
 
 	// Hand out medals
 	var medals []Medal
+
+	// Issue the 1 medal
+	if cl.MinQuantity() == 1 {
+		medals = append(medals, MedalOne)
+	}
+
 	scores := s.HighScores.Scores[cl.Symbol]
 
 	// Expire the scores if their time has reached
