@@ -188,7 +188,7 @@ func runClient(cfg BotConfig, liqChan chan Liquidation) error {
 	}
 }
 
-func symbolLiquidator(state *State, liqChan <-chan Liquidation, tweetChan chan<- string) {
+func symbolLiquidator(state *State, liqChan <-chan Liquidation, tweetChan chan<- preparedTweet) {
 	flusher := time.NewTicker(10 * time.Second)
 	defer flusher.Stop()
 
@@ -199,7 +199,11 @@ func symbolLiquidator(state *State, liqChan <-chan Liquidation, tweetChan chan<-
 	tweet := func(cl CombinedLiquidation) {
 		decoration := state.Decorate(cl)
 		status := decoration.Apply(cl.String())
-		tweetChan <- status
+		tweetChan <- preparedTweet{
+			timestamp: time.Now(),
+			usdValue:  cl.USDValue(),
+			status:    status,
+		}
 	}
 
 	newUnsent := func(l Liquidation) {
@@ -254,24 +258,53 @@ func symbolLiquidator(state *State, liqChan <-chan Liquidation, tweetChan chan<-
 	}
 }
 
+type preparedTweet struct {
+	timestamp time.Time
+	usdValue  int64
+	status    string
+}
+
 func liquidator(liqChan <-chan Liquidation, state *State, client *twitter.Client) {
-	tweetChan := make(chan string, 10000)
+	tweetChan := make(chan preparedTweet, 10000)
 	defer close(tweetChan)
 	go func() {
 		// https://developer.twitter.com/en/docs/basics/rate-limits
 		// 300 tweets in 3 hours -> 100 tweets in 1 hour -> 100 tweets in 3600s
 		// -> 36 seconds between every tweet
 		limiter := rate.NewLimiter(rate.Every(36*time.Second), 300)
+
+		var lagMode bool
+
 		for status := range tweetChan {
+			lag := time.Now().Sub(status.timestamp)
+			if lag > 3*time.Minute {
+				if !lagMode {
+					log.Println("Lag mode enabled", status.timestamp, "more than 3 minutes behind")
+				}
+				lagMode = true
+			} else if lag < 36*time.Second {
+				if lagMode {
+					log.Println("Lag mode disabled, tweet channel cleared")
+				}
+				lagMode = false
+			}
+
+			if lagMode {
+				if status.usdValue < 1000000 {
+					log.Printf("Tweet dropped because of lag mode: %+v\n", status)
+					continue
+				}
+			}
+
 			// Apply the rate limit
 			_ = limiter.Wait(context.Background())
 
-			if tweet, _, err := client.Statuses.Update(status, &twitter.StatusUpdateParams{
+			if tweet, _, err := client.Statuses.Update(status.status, &twitter.StatusUpdateParams{
 				TweetMode: "extended",
 			}); err != nil {
 				log.Println("Failed to tweet:", status, err)
 			} else {
-				log.Printf("Sent tweet: %v: '%v'\n", tweet.IDStr, status)
+				log.Printf("Sent tweet: %v: lag %v: '%v'\n", tweet.IDStr, lag, status)
 			}
 		}
 	}()
