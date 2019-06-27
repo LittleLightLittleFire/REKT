@@ -304,7 +304,7 @@ func liquidator(liqChan <-chan Liquidation, state *State, client *twitter.Client
 			}); err != nil {
 				log.Println("Failed to tweet:", status, err)
 			} else {
-				log.Printf("Sent tweet: %v: lag %v: '%v'\n", tweet.IDStr, lag, status)
+				log.Printf("Sent tweet: %v: lag %v: '%v'\n", tweet.IDStr, lag, status.status)
 			}
 		}
 	}()
