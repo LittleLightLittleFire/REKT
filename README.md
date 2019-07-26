@@ -9,7 +9,7 @@ Update: 26 July 2019
 =================================
 It seems that I have exhausted most of options trying to get the original account unbanned, it seems unlikely that somebody from Twitter will actually review this.
 In the interim I've set up a new bot under [@BXRekt](https://twitter.com/BXRekt).
-If the original becomes unbanned, then we'll use the original, if not, then well, such is life.
+If the original becomes unbanned, then we'll probably move to BXRekt anyway, least it gets reported again and in this bizarro world god knows what can happen.
 
 Update: 25 July 2019
 =================================
