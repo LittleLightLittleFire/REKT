@@ -245,8 +245,8 @@ func (s *State) Decorate(cl CombinedLiquidation) Decoration {
 	// Issue the snark
 	// Because we have limited text, we will not be able to issue snark every single time.
 
-	// USD value:    0 -------- 100k ------------ 500k ------------ 3m --------->
-	// Snark prob:        0%            5%-10%           10%-40%
+	// USD value:    0 -------- 100k ------------ 500k ------------ 2.25m --------->
+	// Snark prob:        0%            5%-13%           13%-40%
 	var issueSnark bool
 
 	usdVal := cl.USDValue()
@@ -254,9 +254,9 @@ func (s *State) Decorate(cl CombinedLiquidation) Decoration {
 	case usdVal <= 100000:
 		issueSnark = false
 	case usdVal <= 500000:
-		issueSnark = lerp(50000, 500000, usdVal, 0.05, 0.10) > rand.Float64()
+		issueSnark = lerp(50000, 500000, usdVal, 0.05, 0.13) > rand.Float64()
 	default:
-		issueSnark = lerp(500000, 3000000, usdVal, 0.10, 0.40) > rand.Float64()
+		issueSnark = lerp(500000, 2250000, usdVal, 0.13, 0.40) > rand.Float64()
 	}
 
 	var snark string
