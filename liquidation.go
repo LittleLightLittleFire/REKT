@@ -25,8 +25,6 @@ type (
 		PriceQuantity
 		Symbol Symbol
 		Side   string
-
-		AmendUp bool
 	}
 
 	// CombinedLiquidation ...

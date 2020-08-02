@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	_ "net/http/pprof"
@@ -302,7 +303,12 @@ func liquidator(liqChan <-chan Liquidation, state *State, client *twitter.Client
 			if tweet, _, err := client.Statuses.Update(status.status, &twitter.StatusUpdateParams{
 				TweetMode: "extended",
 			}); err != nil {
-				log.Println("Failed to tweet:", status, err)
+				log.Println("Failed to tweet:", status.status, err)
+				if strings.Contains(err.Error(), "User is over daily status update limit") {
+					log.Println("Daily status update limit exceeded, forcing 3m sleep")
+					// Force lag mode to activate.
+					time.Sleep(3 * time.Minute)
+				}
 			} else {
 				log.Printf("Sent tweet: %v: lag %v: '%v'\n", tweet.IDStr, lag, status.status)
 			}
@@ -318,11 +324,7 @@ func liquidator(liqChan <-chan Liquidation, state *State, client *twitter.Client
 	}()
 
 	for l := range liqChan {
-		if l.AmendUp {
-			log.Printf("Detected liquidation (amend): %+v\n", l)
-		} else {
-			log.Printf("Detected liquidation: %+v\n", l)
-		}
+		log.Printf("Detected liquidation: %+v\n", l)
 
 		if channels[l.Symbol] == nil {
 			channels[l.Symbol] = make(chan Liquidation, 10000)
