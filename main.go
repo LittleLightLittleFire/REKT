@@ -128,6 +128,15 @@ func runClient(cfg BotConfig, liqChan chan Liquidation) error {
 				}
 
 				it = NewInstrumentTable(curr)
+			case "update":
+				var update []Instrument
+				if err := json.Unmarshal(data.Data, &update); err != nil {
+					return err
+				}
+
+				for _, v := range update {
+					it.Update(v)
+				}
 			}
 
 		case "liquidation":
@@ -364,6 +373,7 @@ func main() {
 		log.Fatal("Failed to load state:", err)
 	}
 
+	// var client *twitter.Client
 	client := twitter.NewClient(oauth1.NewConfig(cfg.TwitterConsumerKey, cfg.TwitterConsumerSecret).Client(oauth1.NoContext, oauth1.NewToken(cfg.TwitterAccessToken, cfg.TwitterTokenSecret)))
 	user, _, err := client.Accounts.VerifyCredentials(nil)
 	if err != nil {
