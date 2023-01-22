@@ -68,7 +68,7 @@ func runClient(cfg BotConfig, liqChan chan Liquidation) error {
 	u.Scheme = "wss"
 	u.Host = cfg.BitMexHost
 	u.Path = "realtime"
-	u.RawQuery = "subscribe=liquidation"
+	u.RawQuery = "subscribe=instrument,liquidation"
 
 	// Connect the websocket
 	conn, _, err := websocket.DefaultDialer.Dial(u.String(), http.Header{})
@@ -98,91 +98,97 @@ func runClient(cfg BotConfig, liqChan chan Liquidation) error {
 	conn.SetReadDeadline(time.Now().Add(pongWait))
 	conn.SetPongHandler(func(string) error { conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 
-	// The BitMex may "insert" / "delete / "insert" the order when it is able to liquidate at a better price
-	// "insert" is sent when the order is submitted
-	// "delete" is sent when the order is executed
-	// It may also "update" the order when the it is amended or partially filled
-	liquidations := make(map[string]Liquidation)
+	// Prevent orderIDs from appearing twice.
+	lastSeen := make(map[string]time.Time)
+
+	var it *InstrumentTable
 
 	for {
-		var data map[string]interface{}
+		var data struct {
+			Table  string          `json:"table"`
+			Action string          `json:"action"`
+			Error  string          `json:"error"`
+			Data   json.RawMessage `json:"data"`
+		}
 		if err := conn.ReadJSON(&data); err != nil {
 			return err
 		}
 
-		if err, ok := data["error"]; ok {
+		log.Printf("Received: %v %v %v\n", data.Table, data.Action, string(data.Data))
+
+		if data.Error != "" {
 			return fmt.Errorf("error in API response: %v", err)
 		}
 
-		// Print JSON so it is parsable later
-		rawJSON, _ := json.Marshal(data)
-		log.Println(string(rawJSON))
+		switch data.Table {
+		case "instrument":
+			switch data.Action {
+			case "partial":
+				var curr []Instrument
+				if err := json.Unmarshal(data.Data, &curr); err != nil {
+					return err
+				}
 
-		if table, ok := data["table"]; ok {
-			switch table {
-			case "liquidation":
-				// This will panic if the cast fails, but it is fine, because it meant bitmex sent us bad data
-				innerDataList := data["data"].([]interface{})
+				it = NewInstrumentTable(curr)
+			}
 
-				switch data["action"] {
-				case "partial":
-				case "delete":
-					for _, innerData := range innerDataList {
-						innerData := innerData.(map[string]interface{})
-						orderID := innerData["orderID"].(string)
+		case "liquidation":
 
-						delete(liquidations, orderID)
+			// BitMex may "insert" / "delete / "insert" the order when it is able to liquidate at a better price
+			// "insert" is sent when the order is submitted
+			// "delete" is sent when the order is executed
+			// It may also "update" the order when the it is amended or partially filled
+
+			switch data.Action {
+			case "partial":
+				var curr []RawLiquidation
+				if err := json.Unmarshal(data.Data, &curr); err != nil {
+					return err
+				}
+
+				// Load the current liquidations as last seen
+				for _, v := range curr {
+					lastSeen[v.OrderID] = time.Now()
+				}
+
+			case "update":
+				// Ignored, since once the tweet goes out there is no recovering it
+
+			case "delete":
+				// Ignored
+
+			case "insert":
+				// Wait for instruments table to be loaded
+				if it == nil {
+					continue
+				}
+
+				// Prune last seen
+				for k, v := range lastSeen {
+					if time.Now().Sub(v) > 4*time.Hour {
+						delete(lastSeen, k)
+					}
+				}
+
+				var inserts []RawLiquidation
+				if err := json.Unmarshal(data.Data, &inserts); err != nil {
+					return err
+				}
+
+				for _, v := range inserts {
+					if _, ok := lastSeen[v.OrderID]; ok {
+						continue
 					}
 
-				case "update":
-					// The liquidation may amended by BitMEX (position may be reduced or price changed)
-					for _, innerData := range innerDataList {
-						innerData := innerData.(map[string]interface{})
+					lastSeen[v.OrderID] = time.Now()
 
-						orderID := innerData["orderID"].(string)
-						amendedLiq := liquidations[orderID]
-
-						if innerData["price"] != nil {
-							amendedLiq.Price = innerData["price"].(float64)
-						}
-
-						if innerData["leavesQty"] != nil {
-							amendedLiq.Quantity = int64(innerData["leavesQty"].(float64))
-						}
-
-						if innerData["symbol"] != nil {
-							amendedLiq.Symbol = Symbol(innerData["symbol"].(string))
-						}
-
-						if innerData["side"] != nil {
-							amendedLiq.Side = innerData["side"].(string)
-						}
-
-						liquidations[orderID] = amendedLiq
+					l, err := it.Process(v)
+					if err != nil {
+						log.Printf("failed to process: %+v %v\n", v, err)
+						continue
 					}
 
-				case "insert":
-					for _, innerData := range innerDataList {
-						innerData := innerData.(map[string]interface{})
-
-						price := innerData["price"].(float64)
-						leavesQty := int64(innerData["leavesQty"].(float64)) // Cast to int64 because this is always int
-						symbol := innerData["symbol"].(string)
-						side := innerData["side"].(string)
-						orderID := innerData["orderID"].(string)
-
-						l := Liquidation{
-							PriceQuantity: PriceQuantity{
-								Price:    price,
-								Quantity: leavesQty,
-							},
-							Symbol: Symbol(symbol),
-							Side:   side,
-						}
-
-						liquidations[orderID] = l
-						liqChan <- l
-					}
+					liqChan <- l
 				}
 			}
 		}
@@ -261,7 +267,7 @@ func symbolLiquidator(state *State, liqChan <-chan Liquidation, tweetChan chan<-
 
 type preparedTweet struct {
 	timestamp time.Time
-	usdValue  int64
+	usdValue  float64
 	status    string
 }
 
@@ -300,17 +306,21 @@ func liquidator(liqChan <-chan Liquidation, state *State, client *twitter.Client
 			// Apply the rate limit
 			_ = limiter.Wait(context.Background())
 
-			if tweet, _, err := client.Statuses.Update(status.status, &twitter.StatusUpdateParams{
-				TweetMode: "extended",
-			}); err != nil {
-				log.Println("Failed to tweet:", status.status, err)
-				if strings.Contains(err.Error(), "User is over daily status update limit") {
-					log.Println("Daily status update limit exceeded, forcing 3m sleep")
-					// Force lag mode to activate.
-					time.Sleep(3 * time.Minute)
+			if client != nil {
+				if tweet, _, err := client.Statuses.Update(status.status, &twitter.StatusUpdateParams{
+					TweetMode: "extended",
+				}); err != nil {
+					log.Println("Failed to tweet:", status.status, err)
+					if strings.Contains(err.Error(), "User is over daily status update limit") {
+						log.Println("Daily status update limit exceeded, forcing 3m sleep")
+						// Force lag mode to activate.
+						time.Sleep(3 * time.Minute)
+					}
+				} else {
+					log.Printf("Sent tweet: %v: lag %v: '%v'\n", tweet.IDStr, lag, status.status)
 				}
 			} else {
-				log.Printf("Sent tweet: %v: lag %v: '%v'\n", tweet.IDStr, lag, status.status)
+				log.Printf("Would have tweeted: lag %v: '%v'\n", lag, status.status)
 			}
 		}
 	}()

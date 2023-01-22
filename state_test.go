@@ -22,14 +22,14 @@ func TestSymbolLiquidator(t *testing.T) {
 	}
 
 	liqChan := make(chan Liquidation)
-	tweetChan := make(chan string)
+	tweetChan := make(chan preparedTweet)
 	go symbolLiquidator(s, liqChan, tweetChan)
 
 	go func() {
 		for result := range tweetChan {
 			// It is a lot easier to test by inspection
 			log.Println(result)
-			verify(result, t)
+			verify(result.status, t)
 		}
 	}()
 
@@ -38,7 +38,8 @@ func TestSymbolLiquidator(t *testing.T) {
 		l := Liquidation{
 			PriceQuantity: PriceQuantity{
 				Price:    float64(5000 + rand.Intn(i+1)),
-				Quantity: int64(rand.Intn(10)) + 1,
+				Quantity: float64(rand.Intn(10)) + 1,
+				Currency: "USD",
 			},
 			Symbol: "XBTUSD",
 			Side:   "Buy",
@@ -66,7 +67,8 @@ func TestStateSimple(t *testing.T) {
 		l := Liquidation{
 			PriceQuantity: PriceQuantity{
 				Price:    float64(rand.Intn(i + 1)),
-				Quantity: int64(rand.Intn(500000)),
+				Quantity: float64(rand.Intn(500000)),
+				Currency: "USD",
 			},
 			Symbol: symbols[i%len(symbols)],
 			Side:   "Buy",
@@ -89,7 +91,8 @@ func TestStreaks(t *testing.T) {
 		l := Liquidation{
 			PriceQuantity: PriceQuantity{
 				Price:    float64(rand.Intn(i + 1)),
-				Quantity: int64(rand.Intn(500000)),
+				Quantity: float64(rand.Intn(500000)),
+				Currency: "USD",
 			},
 			Symbol: "BTCUSD",
 			Side:   "Buy",
@@ -106,7 +109,8 @@ func TestStreaks(t *testing.T) {
 		l := Liquidation{
 			PriceQuantity: PriceQuantity{
 				Price:    float64(rand.Intn(i + 1)),
-				Quantity: int64(rand.Intn(500000)),
+				Quantity: float64(rand.Intn(500000)),
+				Currency: "USD",
 			},
 			Symbol: "BTCUSD",
 			Side:   "Buy",
@@ -123,7 +127,8 @@ func TestStreaks(t *testing.T) {
 		l := Liquidation{
 			PriceQuantity: PriceQuantity{
 				Price:    float64(rand.Intn(i + 1)),
-				Quantity: int64(rand.Intn(500000)),
+				Quantity: float64(rand.Intn(500000)),
+				Currency: "USD",
 			},
 			Symbol: "BTCUSD",
 			Side:   "Buy",
@@ -147,6 +152,7 @@ func Test10m(t *testing.T) {
 		PriceQuantity: PriceQuantity{
 			Price:    10000,
 			Quantity: 10000000,
+			Currency: "USD",
 		},
 		Symbol: "XBTUSD",
 		Side:   "Buy",
@@ -161,6 +167,7 @@ func Test10m(t *testing.T) {
 		PriceQuantity: PriceQuantity{
 			Price:    10000,
 			Quantity: 100000000,
+			Currency: "USD",
 		},
 		Symbol: "XBTUSD",
 		Side:   "Buy",
@@ -175,6 +182,7 @@ func Test10m(t *testing.T) {
 		PriceQuantity: PriceQuantity{
 			Price:    10000,
 			Quantity: 1000000000,
+			Currency: "USD",
 		},
 		Symbol: "XBTUSD",
 		Side:   "Buy",

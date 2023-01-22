@@ -28,9 +28,9 @@ type (
 
 	// Scores for a particular symbol.
 	Scores struct {
-		HighestDay   int64 `json:"highest_day"`
-		HighestWeek  int64 `json:"highest_week"`
-		HighestMonth int64 `json:"highest_month"`
+		HighestDay   float64 `json:"highest_day"`
+		HighestWeek  float64 `json:"highest_week"`
+		HighestMonth float64 `json:"highest_month"`
 
 		LastDay   int        `json:"last_day"`
 		LastWeek  int        `json:"last_week"`
@@ -163,8 +163,8 @@ func (s *State) save() error {
 }
 
 // Linear interpolation
-func lerp(x, y, z int64, start, end float64) float64 {
-	return start + ((float64(z)-float64(x))/(float64(y)-float64(x)))*(end-start)
+func lerp(x, y, z, start, end float64) float64 {
+	return start + ((z-x)/(y-x))*(end-start)
 }
 
 // Decorate a new liquidation.
@@ -217,7 +217,7 @@ func (s *State) Decorate(cl CombinedLiquidation) Decoration {
 	}
 
 	// Award the 100k medals
-	for i := int64(0); i < maxQuantity/100000; i++ {
+	for i := int64(0); i < int64(cl.USDValue()/100000); i++ {
 		medals = append(medals, Medal100k)
 	}
 

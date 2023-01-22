@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -16,13 +17,28 @@ type (
 
 	// PriceQuantity pair.
 	PriceQuantity struct {
-		Price    float64
-		Quantity int64
+		Price         float64
+		Quantity      float64
+		Currency      string
+		TotalUSDValue float64
+
+		MinStep float64
+		MinTick float64
+	}
+
+	// RawLiquidation is data from the table.
+	RawLiquidation struct {
+		OrderID   string  `json:"orderID"`
+		Price     float64 `json:"price"`
+		Symbol    Symbol  `json:"symbol"`
+		LeavesQty float64 `json:"leavesQty"`
+		Side      string  `json:"side"`
 	}
 
 	// Liquidation data (raw).
 	Liquidation struct {
 		PriceQuantity
+
 		Symbol Symbol
 		Side   string
 	}
@@ -39,7 +55,47 @@ type (
 const (
 	// MaxCombinedPositions caps the number of liquidations that can be combined into a single tweet.
 	MaxCombinedPositions = 3
+
+	// MaxUSDValueMergable ...
+	MaxUSDValueMergable = 250000
 )
+
+func displayTick(value, tick float64) string {
+	if tick == 0 {
+		return humanize.Commaf(value)
+	}
+
+	if math.Log10(tick) < 0 {
+		return humanize.CommafWithDigits(value, int(-math.Floor(math.Log10(tick))))
+	}
+
+	return humanize.Comma(int64(value))
+}
+
+func displayUSD(value float64) string {
+	res := humanize.CommafWithDigits(value, 2)
+
+	idx := strings.Index(res, ".")
+	if idx == -1 {
+		return res
+	}
+
+	if idx == len(res)-2 {
+		return res + "0"
+	}
+
+	return res
+}
+
+// DisplayPrice using min tick.
+func (pq PriceQuantity) DisplayPrice() string {
+	return displayTick(pq.Price, pq.MinTick)
+}
+
+// DisplayQuantity using min step.
+func (pq PriceQuantity) DisplayQuantity() string {
+	return displayTick(pq.Quantity, pq.MinStep)
+}
 
 // ToCombined converts a single liquidation to a combined liquidation.
 func (l Liquidation) ToCombined() CombinedLiquidation {
@@ -63,12 +119,12 @@ func (cl CombinedLiquidation) CanCombine(l Liquidation) bool {
 	}
 
 	for _, l2 := range cl.Liquidations {
-		if l2.Quantity > cl.Symbol.MaxQuantityMergable() {
+		if l2.TotalUSDValue > MaxUSDValueMergable {
 			return false
 		}
 	}
 
-	if l.Quantity > l.Symbol.MaxQuantityMergable() {
+	if l.TotalUSDValue > MaxUSDValueMergable {
 		return false
 	}
 
@@ -103,12 +159,30 @@ func (l Liquidation) String() string {
 		position = "long"
 	}
 
-	// Liquidated short on XBTUSD: Buy 130170 @ 772.02
-	return fmt.Sprintf("Liquidated %v on %v: %v %v @ %v", position, l.Symbol, l.Side, humanize.Comma(l.Quantity), l.Price)
+	switch l.Currency {
+	case "USD", "USDT":
+		// Example: Liquidated short on XBTUSD: Buy 130170 @ 772.02
+		return fmt.Sprintf("Liquidated %v on %v: %v %v @ %v", position, l.Symbol, l.Side, l.DisplayQuantity(), l.DisplayPrice())
+
+	default:
+		// Example: Liquidated short on ETHUSD: Buy 130170 Cont @ 772.02 (≈ $XXXX)
+		return fmt.Sprintf("Liquidated %v on %v: %v %v %v @ %v (≈ $%v)", position, l.Symbol, l.Side, l.DisplayQuantity(), l.Currency, l.DisplayPrice(), displayUSD(l.TotalUSDValue))
+	}
+
 }
 
 // String implements Stringer.
 func (cl CombinedLiquidation) String() string {
+
+	var totalValue float64
+	currPrice := cl.Liquidations[0].DisplayPrice()
+	samePrice := true
+
+	for _, l := range cl.Liquidations {
+		totalValue += l.TotalUSDValue
+		samePrice = samePrice && l.DisplayPrice() == currPrice
+	}
+
 	var position string
 	if cl.Side == "Buy" {
 		position = "short"
@@ -117,43 +191,39 @@ func (cl CombinedLiquidation) String() string {
 	}
 
 	cp := ""
-	for i, pc := range cl.Liquidations {
+	for i, l := range cl.Liquidations {
 		if i > 0 {
 			cp += " + "
 		}
-		cp += humanize.Comma(pc.Quantity)
+		cp += l.DisplayQuantity()
+	}
+
+	switch cl.Liquidations[0].Currency {
+	case "USD", "USDT":
+	default:
+		cp += " " + cl.Liquidations[0].Currency
 	}
 
 	cp += " @ "
-	for i, pc := range cl.Liquidations {
-		if i > 0 {
-			cp += ", "
+	if samePrice {
+		cp += currPrice
+	} else {
+		for i, l := range cl.Liquidations {
+			if i > 0 {
+				cp += ", "
+			}
+			cp += l.DisplayPrice()
 		}
-		cp += fmt.Sprint(pc.Price)
 	}
 
-	// Liquidated short on XBTUSD: Buy 130170, 123450 @ 772.02, 734.01
-	return fmt.Sprintf("Liquidated %v on %v: %v %s", position, cl.Symbol, cl.Side, cp)
-}
+	switch cl.Liquidations[0].Currency {
+	case "USD", "USDT":
+		// Example: Liquidated short on XBTUSD: Buy 130170, 123450 @ 772.02, 734.01
+		return fmt.Sprintf("Liquidated %v on %v: %v %s", position, cl.Symbol, cl.Side, cp)
 
-// IsUSDContract returns the USD value of this contract.
-func (s Symbol) IsUSDContract() bool {
-	return strings.HasPrefix(string(s), "XBT")
-}
-
-// MaxQuantityMergable returns the maximum size mergable for this symbol.
-func (s Symbol) MaxQuantityMergable() int64 {
-	switch {
-	case s.IsUSDContract():
-		return 250000
-	case s == "ETHUSD":
-		return 500000
-	case strings.HasPrefix(string(s), "ADA"):
-		return 5000000
-	case strings.HasPrefix(string(s), "TRX"):
-		return 5000000
 	default:
-		return 1000000
+		// Example Liquidated short on ETHUSD: Buy 100, 200 Cont @ 772.02, 734.01 (≈ $XXXX)
+		return fmt.Sprintf("Liquidated %v on %v: %v %s (≈ $%v)", position, cl.Symbol, cl.Side, cp, displayUSD(totalValue))
 	}
 }
 
@@ -172,33 +242,28 @@ func (l Liquidation) CombiningDelay() time.Duration {
 }
 
 // USDValue returns the USD value of the liquidation.
-func (cl CombinedLiquidation) USDValue() int64 {
-	if cl.Symbol.IsUSDContract() {
-		total := int64(0)
-		for _, x := range cl.Liquidations {
-			total += x.Quantity
-		}
-
-		return total
+func (cl CombinedLiquidation) USDValue() (total float64) {
+	for _, v := range cl.Liquidations {
+		total += v.TotalUSDValue
 	}
 
-	return 0
+	return total
 }
 
 // TotalQuantity of a combined liquidation.
-func (cl CombinedLiquidation) TotalQuantity() (total int64) {
-	for _, q := range cl.Liquidations {
-		total += q.Quantity
+func (cl CombinedLiquidation) TotalQuantity() (total float64) {
+	for _, v := range cl.Liquidations {
+		total += v.Quantity
 	}
 
 	return total
 }
 
 // MaxQuantity of a combined liquidation.
-func (cl CombinedLiquidation) MaxQuantity() (max int64) {
-	for _, q := range cl.Liquidations {
-		if q.Quantity > max {
-			max = q.Quantity
+func (cl CombinedLiquidation) MaxQuantity() (max float64) {
+	for _, v := range cl.Liquidations {
+		if v.Quantity > max {
+			max = v.Quantity
 		}
 	}
 
@@ -206,7 +271,7 @@ func (cl CombinedLiquidation) MaxQuantity() (max int64) {
 }
 
 // MinQuantity of a combined liquidation.
-func (cl CombinedLiquidation) MinQuantity() (min int64) {
+func (cl CombinedLiquidation) MinQuantity() (min float64) {
 	if len(cl.Liquidations) == 0 {
 		return 0
 	}
