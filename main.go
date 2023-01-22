@@ -114,8 +114,6 @@ func runClient(cfg BotConfig, liqChan chan Liquidation) error {
 			return err
 		}
 
-		log.Printf("Received: %v %v %v\n", data.Table, data.Action, string(data.Data))
-
 		if data.Error != "" {
 			return fmt.Errorf("error in API response: %v", err)
 		}
@@ -133,6 +131,7 @@ func runClient(cfg BotConfig, liqChan chan Liquidation) error {
 			}
 
 		case "liquidation":
+			log.Printf("Received: %v %v %v\n", data.Table, data.Action, string(data.Data))
 
 			// BitMex may "insert" / "delete / "insert" the order when it is able to liquidate at a better price
 			// "insert" is sent when the order is submitted
