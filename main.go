@@ -384,8 +384,9 @@ func main() {
 	}
 
 	var client *twitter.Client
+
 	if os.Getenv("DEV") != "1" {
-		client := twitter.NewClient(oauth1.NewConfig(cfg.TwitterConsumerKey, cfg.TwitterConsumerSecret).Client(oauth1.NoContext, oauth1.NewToken(cfg.TwitterAccessToken, cfg.TwitterTokenSecret)))
+		client = twitter.NewClient(oauth1.NewConfig(cfg.TwitterConsumerKey, cfg.TwitterConsumerSecret).Client(oauth1.NoContext, oauth1.NewToken(cfg.TwitterAccessToken, cfg.TwitterTokenSecret)))
 		user, _, err := client.Accounts.VerifyCredentials(nil)
 		if err != nil {
 			log.Fatal("Failed to verify Twitter credentials:", err)
