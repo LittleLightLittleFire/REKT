@@ -128,6 +128,7 @@ func runClient(cfg BotConfig, liqChan chan Liquidation) error {
 				}
 
 				it = NewInstrumentTable(curr)
+
 			case "update":
 				var update []Instrument
 				if err := json.Unmarshal(data.Data, &update); err != nil {
@@ -163,7 +164,15 @@ func runClient(cfg BotConfig, liqChan chan Liquidation) error {
 				// Ignored, since once the tweet goes out there is no recovering it
 
 			case "delete":
-				// Ignored
+				var update []RawLiquidation
+				if err := json.Unmarshal(data.Data, &update); err != nil {
+					return err
+				}
+
+				// Update last seen to keep it alive
+				for _, v := range update {
+					lastSeen[v.OrderID] = time.Now()
+				}
 
 			case "insert":
 				// Wait for instruments table to be loaded
@@ -173,7 +182,7 @@ func runClient(cfg BotConfig, liqChan chan Liquidation) error {
 
 				// Prune last seen
 				for k, v := range lastSeen {
-					if time.Now().Sub(v) > 4*time.Hour {
+					if time.Now().Sub(v) > 24*time.Hour {
 						delete(lastSeen, k)
 					}
 				}
@@ -185,6 +194,7 @@ func runClient(cfg BotConfig, liqChan chan Liquidation) error {
 
 				for _, v := range inserts {
 					if _, ok := lastSeen[v.OrderID]; ok {
+						lastSeen[v.OrderID] = time.Now()
 						continue
 					}
 
@@ -373,14 +383,16 @@ func main() {
 		log.Fatal("Failed to load state:", err)
 	}
 
-	// var client *twitter.Client
-	client := twitter.NewClient(oauth1.NewConfig(cfg.TwitterConsumerKey, cfg.TwitterConsumerSecret).Client(oauth1.NoContext, oauth1.NewToken(cfg.TwitterAccessToken, cfg.TwitterTokenSecret)))
-	user, _, err := client.Accounts.VerifyCredentials(nil)
-	if err != nil {
-		log.Fatal("Failed to verify Twitter credentials:", err)
-	}
+	var client *twitter.Client
+	if os.Getenv("DEV") != "1" {
+		client := twitter.NewClient(oauth1.NewConfig(cfg.TwitterConsumerKey, cfg.TwitterConsumerSecret).Client(oauth1.NoContext, oauth1.NewToken(cfg.TwitterAccessToken, cfg.TwitterTokenSecret)))
+		user, _, err := client.Accounts.VerifyCredentials(nil)
+		if err != nil {
+			log.Fatal("Failed to verify Twitter credentials:", err)
+		}
 
-	log.Println("Logged in as:", user.Name)
+		log.Println("Logged in as:", user.Name)
+	}
 
 	// Start the liquidator
 	liqChan := make(chan Liquidation, 1024)
