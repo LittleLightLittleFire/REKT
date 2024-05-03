@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strings"
 	"time"
 
 	_ "net/http/pprof"
@@ -293,49 +292,41 @@ func liquidator(liqChan <-chan Liquidation, state *State, client *twitter.Client
 	tweetChan := make(chan preparedTweet, 10000)
 	defer close(tweetChan)
 	go func() {
-		// https://developer.twitter.com/en/docs/basics/rate-limits
-		// 300 tweets in 3 hours -> 100 tweets in 1 hour -> 100 tweets in 3600s
-		// -> 36 seconds between every tweet
-		limiter := rate.NewLimiter(rate.Every(36*time.Second), 300)
-
-		var lagMode bool
+		// https://developer.twitter.com/en/docs/twitter-api/tweets/manage-tweets/api-reference/post-tweets
+		// 200 requests in 15 min
+		// 1500 tweets per 30 days on free plan (50 daily)
+		//
+		// We don't want to blow all of it in a single day, cap at max 50 tweets a day and refil at 1 every 1728s (1500 / 30 days)
+		const maxDaily = 50
+		limiter := rate.NewLimiter(rate.Every(1728*time.Second), 50)
 
 		for status := range tweetChan {
-			lag := time.Now().Sub(status.timestamp)
-			if lag > 3*time.Minute {
-				if !lagMode {
-					log.Println("Lag mode enabled", status.timestamp, "more than 3 minutes behind")
-				}
-				lagMode = true
-			} else if lag < 36*time.Second {
-				if lagMode {
-					log.Println("Lag mode disabled, tweet channel cleared")
-				}
-				lagMode = false
+			var minValue float64
+			switch {
+			case limiter.Burst() < 5:
+				minValue = 5000000
+			case limiter.Burst() < 10:
+				minValue = 1000000
+			case limiter.Burst() < 25:
+				minValue = 100000
 			}
 
-			if lagMode {
-				if status.usdValue < 1000000 {
-					log.Printf("Tweet dropped because of lag mode: %+v\n", status)
-					continue
-				}
+			if status.usdValue < minValue {
+				log.Printf("Tweet dropped because of value cap: %v < %v\n", status.usdValue, minValue)
+				continue
 			}
 
 			// Apply the rate limit
 			_ = limiter.Wait(context.Background())
 
+			lag := time.Now().Sub(status.timestamp)
 			if client != nil {
 				if tweet, _, err := client.Statuses.Update(status.status, &twitter.StatusUpdateParams{
 					TweetMode: "extended",
 				}); err != nil {
 					log.Println("Failed to tweet:", status.status, err)
-					if strings.Contains(err.Error(), "User is over daily status update limit") {
-						log.Println("Daily status update limit exceeded, forcing 3m sleep")
-						// Force lag mode to activate.
-						time.Sleep(3 * time.Minute)
-					}
 				} else {
-					log.Printf("Sent tweet: %v: lag %v: '%v'\n", tweet.IDStr, lag, status.status)
+					log.Printf("Sent tweet: %v: bursts %v: lag %v: '%v'\n", tweet.IDStr, limiter.Burst(), lag, status.status)
 				}
 			} else {
 				log.Printf("Would have tweeted: lag %v: '%v'\n", lag, status.status)
