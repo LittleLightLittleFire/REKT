@@ -2,8 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"io/ioutil"
-	"log"
 	"math/rand"
 	"os"
 	"strconv"
@@ -114,7 +112,7 @@ func NewState() (*State, error) {
 	state.SaveFile = highScoresFile
 
 	// Load memes
-	snarkText, err := ioutil.ReadFile(snarkFile)
+	snarkText, err := os.ReadFile(snarkFile)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +122,7 @@ func NewState() (*State, error) {
 	state.resetSnark()
 
 	// Load multi-kill
-	multiKillText, err := ioutil.ReadFile(multiKillFile)
+	multiKillText, err := os.ReadFile(multiKillFile)
 	if err != nil {
 		return nil, err
 	}
@@ -139,11 +137,6 @@ func (s *State) resetSnark() {
 	for i := range s.Snark {
 		j := rand.Intn(i + 1)
 		s.Snark[i], s.Snark[j] = s.Snark[j], s.Snark[i]
-	}
-
-	log.Println("Banter order:")
-	for _, v := range s.Snark {
-		log.Println("    ", v)
 	}
 }
 

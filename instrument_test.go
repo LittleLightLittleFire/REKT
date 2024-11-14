@@ -2,15 +2,15 @@ package main
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"log"
+	"os"
 	"testing"
 
 	"gopkg.in/guregu/null.v4"
 )
 
 func TestInstruments(t *testing.T) {
-	raw, err := ioutil.ReadFile("instruments.json")
+	raw, err := os.ReadFile("instruments.json")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
@@ -15,10 +14,12 @@ import (
 
 	"golang.org/x/time/rate"
 
-	"github.com/dghubble/go-twitter/twitter"
-	"github.com/dghubble/oauth1"
 	"github.com/gorilla/websocket"
-	"github.com/hashicorp/errwrap"
+	"github.com/michimani/gotwi"
+	"github.com/michimani/gotwi/tweet/managetweet"
+	ctypes "github.com/michimani/gotwi/tweet/managetweet/types"
+	"github.com/michimani/gotwi/user/userlookup"
+	utypes "github.com/michimani/gotwi/user/userlookup/types"
 )
 
 // BotConfig store the bot configuration.
@@ -72,7 +73,7 @@ func runClient(cfg BotConfig, liqChan chan Liquidation) error {
 	// Connect the websocket
 	conn, _, err := websocket.DefaultDialer.Dial(u.String(), http.Header{})
 	if err != nil {
-		return errwrap.Wrapf("could not connect to BitMex: {{err}}", err)
+		return fmt.Errorf("could not connect to BitMex: %w", err)
 	}
 
 	log.Println("Connected to BitMex:", u.String())
@@ -181,7 +182,7 @@ func runClient(cfg BotConfig, liqChan chan Liquidation) error {
 
 				// Prune last seen
 				for k, v := range lastSeen {
-					if time.Now().Sub(v) > 24*time.Hour {
+					if time.Since(v) > 24*time.Hour {
 						delete(lastSeen, k)
 					}
 				}
@@ -245,7 +246,7 @@ func symbolLiquidator(state *State, liqChan <-chan Liquidation, tweetChan chan<-
 				continue
 			}
 
-			if time.Now().Sub(unsentReceivedAt) < unsentCombiningDelay {
+			if time.Since(unsentReceivedAt) < unsentCombiningDelay {
 				continue
 			}
 
@@ -288,7 +289,7 @@ type preparedTweet struct {
 	status    string
 }
 
-func liquidator(liqChan <-chan Liquidation, state *State, client *twitter.Client) {
+func liquidator(liqChan <-chan Liquidation, state *State, client *gotwi.Client) {
 	tweetChan := make(chan preparedTweet, 10000)
 	defer close(tweetChan)
 	go func() {
@@ -297,7 +298,6 @@ func liquidator(liqChan <-chan Liquidation, state *State, client *twitter.Client
 		// 1500 tweets per 30 days on free plan (50 daily)
 		//
 		// We don't want to blow all of it in a single day, cap at max 50 tweets a day and refil at 1 every 1728s (1500 / 30 days)
-		const maxDaily = 50
 		limiter := rate.NewLimiter(rate.Every(1728*time.Second), 50)
 
 		for status := range tweetChan {
@@ -319,14 +319,19 @@ func liquidator(liqChan <-chan Liquidation, state *State, client *twitter.Client
 			// Apply the rate limit
 			_ = limiter.Wait(context.Background())
 
-			lag := time.Now().Sub(status.timestamp)
+			lag := time.Since(status.timestamp)
 			if client != nil {
-				if tweet, _, err := client.Statuses.Update(status.status, &twitter.StatusUpdateParams{
-					TweetMode: "extended",
-				}); err != nil {
+				res, err := managetweet.Create(context.Background(), client, &ctypes.CreateInput{
+					Text: gotwi.String(status.status),
+				})
+				if err != nil {
 					log.Println("Failed to tweet:", status.status, err)
 				} else {
-					log.Printf("Sent tweet: %v: bursts %v: lag %v: '%v'\n", tweet.IDStr, limiter.Burst(), lag, status.status)
+					if res.Data.ID != nil {
+						log.Printf("Sent tweet: %v: bursts %v: lag %v: '%v'\n", *res.Data.ID, limiter.Burst(), lag, status.status)
+					} else {
+						log.Printf("Sent tweet: (???): bursts %v: lag %v: '%v'\n", limiter.Burst(), lag, status.status)
+					}
 				}
 			} else {
 				log.Printf("Would have tweeted: lag %v: '%v'\n", lag, status.status)
@@ -357,8 +362,6 @@ func liquidator(liqChan <-chan Liquidation, state *State, client *twitter.Client
 func main() {
 	log.SetFlags(log.Lshortfile | log.LstdFlags | log.Lmicroseconds)
 
-	rand.Seed(time.Now().UnixNano())
-
 	go func() {
 		log.Println("Listening on localhost:6060 (pprof)")
 		log.Println(http.ListenAndServe("localhost:6060", nil))
@@ -369,21 +372,29 @@ func main() {
 		log.Fatal("Unable to load config:", err)
 	}
 
-	state, err := NewState()
-	if err != nil {
-		log.Fatal("Failed to load state:", err)
+	in := &gotwi.NewClientInput{
+		AuthenticationMethod: gotwi.AuthenMethodOAuth1UserContext,
+		APIKey:               cfg.TwitterConsumerKey,
+		APIKeySecret:         cfg.TwitterConsumerSecret,
+		OAuthToken:           cfg.TwitterAccessToken,
+		OAuthTokenSecret:     cfg.TwitterTokenSecret,
 	}
 
-	var client *twitter.Client
+	client, err := gotwi.NewClient(in)
+	if err != nil {
+		log.Fatalln(err)
+	}
 
-	if os.Getenv("DEV") != "1" {
-		client = twitter.NewClient(oauth1.NewConfig(cfg.TwitterConsumerKey, cfg.TwitterConsumerSecret).Client(oauth1.NoContext, oauth1.NewToken(cfg.TwitterAccessToken, cfg.TwitterTokenSecret)))
-		user, _, err := client.Accounts.VerifyCredentials(nil)
-		if err != nil {
-			log.Fatal("Failed to verify Twitter credentials:", err)
-		}
+	u, err := userlookup.GetMe(context.Background(), client, &utypes.GetMeInput{})
+	if err != nil {
+		log.Fatalln(err)
+	}
 
-		log.Println("Logged in as:", user.Name)
+	log.Println("Logged in as:", *u.Data.Username)
+
+	state, err := NewState()
+	if err != nil {
+		log.Fatalln("Failed to load state:", err)
 	}
 
 	// Start the liquidator
