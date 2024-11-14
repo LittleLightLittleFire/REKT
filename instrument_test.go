@@ -36,6 +36,16 @@ func TestInstruments(t *testing.T) {
 		MarkPrice: null.FloatFrom(btcPrice),
 	})
 
+	it.Update(Instrument{
+		Symbol:    ".BXBTT30M",
+		MarkPrice: null.FloatFrom(btcPrice),
+	})
+
+	it.Update(Instrument{
+		Symbol:    ".BETHT",
+		MarkPrice: null.FloatFrom(btcPrice),
+	})
+
 	// Test values
 	table := []struct {
 		Liq       RawLiquidation
@@ -54,7 +64,7 @@ func TestInstruments(t *testing.T) {
 			},
 			Quantity: 1,
 			Currency: "XBT",
-			USD:      22755.17,
+			USD:      22758.5832755,
 		},
 
 		{
@@ -66,7 +76,7 @@ func TestInstruments(t *testing.T) {
 			},
 			Quantity: 0.29,
 			Currency: "ETH",
-			USD:      469.96,
+			USD:      474.6445860100001,
 		},
 
 		{
@@ -78,7 +88,7 @@ func TestInstruments(t *testing.T) {
 			},
 			Quantity: 0.5,
 			Currency: "ETH",
-			USD:      810.28,
+			USD:      821.5754128499999,
 		},
 
 		// Quanto contracts
@@ -194,4 +204,68 @@ func TestInstruments(t *testing.T) {
 		},
 	}
 	log.Println(cl)
+}
+
+func TestInstruments2(t *testing.T) {
+	raw, err := os.ReadFile("instruments2.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var data struct {
+		Table  string       `json:"table"`
+		Action string       `json:"action"`
+		Error  string       `json:"error"`
+		Data   []Instrument `json:"data"`
+	}
+
+	if err := json.Unmarshal(raw, &data); err != nil {
+		t.Fatal(err)
+	}
+
+	it := NewInstrumentTable(data.Data)
+
+	// Test values
+	table := []struct {
+		Liq       RawLiquidation
+		MarkPrice float64
+		Quantity  float64
+		Currency  string
+		USD       float64
+	}{
+		{
+			Liq: RawLiquidation{
+				LeavesQty: 4000,
+				Price:     0.00635,
+				Symbol:    "NEIROUSDT",
+				Side:      "SELL",
+			},
+			Quantity: 4000,
+			Currency: "NEIRO",
+			USD:      25.409905999999996,
+		},
+	}
+
+	for _, v := range table {
+		it.Update(Instrument{
+			Symbol:    v.Liq.Symbol,
+			MarkPrice: null.FloatFrom(v.Liq.Price),
+		})
+
+		l, err := it.Process(v.Liq)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if int(l.TotalUSDValue)*100 != int(v.USD)*100 {
+			t.Fatal("expected usd calculation", v.Liq, l.TotalUSDValue, v.USD)
+		}
+		if l.Currency != v.Currency {
+			t.Fatal("expected currency", v.Liq, l.Currency, v.Currency)
+		}
+		if int(l.Quantity)*100 != int(v.Quantity)*100 {
+			t.Fatal("expected quantity", v.Liq, l.Quantity, v.Quantity)
+		}
+		log.Println(l)
+	}
 }

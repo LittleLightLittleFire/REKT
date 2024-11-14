@@ -380,17 +380,20 @@ func main() {
 		OAuthTokenSecret:     cfg.TwitterTokenSecret,
 	}
 
-	client, err := gotwi.NewClient(in)
-	if err != nil {
-		log.Fatalln(err)
-	}
+	var client *gotwi.Client
+	if cfg.TwitterConsumerKey != "" {
+		client, err := gotwi.NewClient(in)
+		if err != nil {
+			log.Fatalln(err)
+		}
 
-	u, err := userlookup.GetMe(context.Background(), client, &utypes.GetMeInput{})
-	if err != nil {
-		log.Fatalln(err)
-	}
+		u, err := userlookup.GetMe(context.Background(), client, &utypes.GetMeInput{})
+		if err != nil {
+			log.Fatalln(err)
+		}
 
-	log.Println("Logged in as:", *u.Data.Username)
+		log.Println("Logged in as:", *u.Data.Username)
+	}
 
 	state, err := NewState()
 	if err != nil {

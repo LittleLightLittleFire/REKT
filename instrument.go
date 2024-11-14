@@ -43,6 +43,7 @@ type Instrument struct {
 	IsInverse bool `json:"isInverse"`
 	IsQuanto  bool `json:"isQuanto"`
 
+	ReferenceSymbol                Symbol     `json:"referenceSymbol"`
 	PositionCurrency               string     `json:"positionCurrency"`
 	QuoteCurrency                  string     `json:"quoteCurrency"`
 	SettleCurrency                 string     `json:"settlCurrency"`
@@ -155,6 +156,31 @@ func (it *InstrumentTable) PriceUSD(currency string) float64 {
 	return 0
 }
 
+func (it *InstrumentTable) USDLookup(symbol Symbol) (res float64) {
+	inst, ok := it.insts[symbol]
+	if !ok {
+		return 0
+	}
+
+	if inst.QuoteCurrency == "USD" {
+		return 1
+	} else if inst.QuoteCurrency == "XBt" {
+		return it.insts[".BXBT"].MarkPrice.Float64 / 100000000
+	} else if inst.QuoteCurrency == "XBT" {
+		return it.insts[".BXBT"].MarkPrice.Float64
+	} else if inst.QuoteCurrency == "USDt" {
+		return it.insts[".BUSDT"].MarkPrice.Float64 / 100000000
+	} else if inst.QuoteCurrency == "USDT" {
+		return it.insts[".BUSDT"].MarkPrice.Float64
+	}
+
+	if inst.ReferenceSymbol == symbol {
+		return 0
+	}
+
+	return it.USDLookup(inst.ReferenceSymbol) * inst.MarkPrice.Float64
+}
+
 // Process calculates the liquidated position's display quantity, units and USD value.
 func (it *InstrumentTable) Process(rl RawLiquidation) (Liquidation, error) {
 	inst, ok := it.insts[rl.Symbol]
@@ -182,7 +208,7 @@ func (it *InstrumentTable) Process(rl RawLiquidation) (Liquidation, error) {
 		pq.TotalUSDValue = inst.NotionalValue() * rl.LeavesQty * it.PriceUSD(inst.SettleCurrency)
 	} else {
 		pq.Quantity = rl.LeavesQty * inst.NotionalValue()
-		pq.TotalUSDValue = inst.NotionalValue() * rl.LeavesQty * it.PriceUSD(inst.PositionCurrency)
+		pq.TotalUSDValue = inst.NotionalValue() * rl.LeavesQty * it.USDLookup(inst.ReferenceSymbol) * inst.MarkPrice.Float64
 	}
 
 	// log.Println(inst.Symbol)
