@@ -58,6 +58,8 @@ const (
 
 	// MaxUSDValueMergable ...
 	MaxUSDValueMergable = 250000
+
+	epsilon = 0.000001
 )
 
 func displayTick(value, tick float64) string {
@@ -166,7 +168,11 @@ func (l Liquidation) String() string {
 
 	default:
 		// Example: Liquidated short on ETHUSD: Buy 130170 Cont @ 772.02 (≈ $XXXX)
-		return fmt.Sprintf("Liquidated %v on %v: %v %v %v @ %v (≈ $%v)", position, l.Symbol, l.Side, l.DisplayQuantity(), l.Currency, l.DisplayPrice(), displayUSD(l.TotalUSDValue))
+		if l.TotalUSDValue < epsilon {
+			return fmt.Sprintf("Liquidated %v on %v: %v %v %v @ %v", position, l.Symbol, l.Side, l.DisplayQuantity(), l.Currency, l.DisplayPrice())
+		} else {
+			return fmt.Sprintf("Liquidated %v on %v: %v %v %v @ %v (≈ $%v)", position, l.Symbol, l.Side, l.DisplayQuantity(), l.Currency, l.DisplayPrice(), displayUSD(l.TotalUSDValue))
+		}
 	}
 
 }
