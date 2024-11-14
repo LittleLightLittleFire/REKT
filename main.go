@@ -382,7 +382,7 @@ func main() {
 
 	var client *gotwi.Client
 	if cfg.TwitterConsumerKey != "" {
-		client, err := gotwi.NewClient(in)
+		client, err = gotwi.NewClient(in)
 		if err != nil {
 			log.Fatalln(err)
 		}
