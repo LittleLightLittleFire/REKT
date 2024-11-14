@@ -1,0 +1,27 @@
+# github.com/dustin/go-humanize v1.0.1
+## explicit; go 1.16
+github.com/dustin/go-humanize
+# github.com/gorilla/websocket v1.5.1
+## explicit; go 1.20
+github.com/gorilla/websocket
+# github.com/michimani/gotwi v0.16.1
+## explicit; go 1.22
+github.com/michimani/gotwi
+github.com/michimani/gotwi/fields
+github.com/michimani/gotwi/internal/gotwierrors
+github.com/michimani/gotwi/internal/util
+github.com/michimani/gotwi/resources
+github.com/michimani/gotwi/tweet/managetweet
+github.com/michimani/gotwi/tweet/managetweet/types
+github.com/michimani/gotwi/user/userlookup
+github.com/michimani/gotwi/user/userlookup/types
+# golang.org/x/net v0.17.0
+## explicit; go 1.17
+golang.org/x/net/internal/socks
+golang.org/x/net/proxy
+# golang.org/x/time v0.5.0
+## explicit; go 1.18
+golang.org/x/time/rate
+# gopkg.in/guregu/null.v4 v4.0.0
+## explicit
+gopkg.in/guregu/null.v4
