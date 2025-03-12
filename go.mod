@@ -1,6 +1,7 @@
 module github.com/LittleLightLittleFire/REKT
 
 go 1.22.1
+toolchain go1.23.7
 
 require (
 	github.com/dustin/go-humanize v1.0.1
@@ -10,4 +11,4 @@ require (
 	gopkg.in/guregu/null.v4 v4.0.0
 )
 
-require golang.org/x/net v0.17.0 // indirect
+require golang.org/x/net v0.36.0 // indirect
